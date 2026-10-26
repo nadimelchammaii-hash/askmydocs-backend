@@ -1,58 +1,110 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# AskMyDocs — Backend
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Laravel REST API for AskMyDocs: upload PDF documents and ask questions about them, with answers grounded in the documents and cited by page (Retrieval-Augmented Generation).
 
-## About Laravel
+The UI is a separate application in its own repository: **askmydocs-frontend** (Vue 3 + Vuetify).
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+> Status: Phase 1 (backend foundation) in progress.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Stack
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+| Concern | Choice |
+|---|---|
+| Framework | Laravel 13, PHP 8.4 |
+| Database | PostgreSQL 18 + pgvector (database-only Docker container during development) |
+| Queue | Laravel `database` driver, workers on the `answers` and `documents` queues |
+| Tests | Pest, against a real PostgreSQL test database |
+| Formatting | Laravel Pint |
 
-## Learning Laravel
+## Local development (Windows)
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+Laravel runs **natively**. Only PostgreSQL runs in Docker, because pgvector is not readily available for native PostgreSQL on Windows. The full application is containerized later (Phase 9).
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+### Prerequisites
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+- PHP 8.4 with the `pdo_pgsql`, `pgsql`, `mbstring`, `fileinfo` and `curl` extensions
+- Composer 2
+- Docker Desktop (running)
 
-## Agentic Development
+### Ports
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+| Service | Port | Configured in |
+|---|---|---|
+| Laravel API | `8000` | `php artisan serve --port=8000` |
+| PostgreSQL (container) | host `5433` → container `5432` | `DB_PORT` / `DB_HOST_PORT` in `.env` |
+| Frontend SPA (other repo) | `3000` | `FRONTEND_URL` in `.env` |
 
-```bash
-composer require laravel/boost --dev
+Host port `5432` is deliberately avoided because it may already be used by a native PostgreSQL installation. Windows can also reserve port ranges (Hyper-V/WinNAT), so check a port before using it:
 
-php artisan boost:install
+```powershell
+Get-NetTCPConnection -State Listen -LocalPort 5433 -ErrorAction SilentlyContinue   # no output = free
+netsh interface ipv4 show excludedportrange protocol=tcp                           # 5433 must not fall in a listed range
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+If `5433` is unavailable, choose another free port and set **both** `DB_PORT` and `DB_HOST_PORT` in `.env`.
 
-## Contributing
+Always use `localhost` (not `127.0.0.1`) for the API and SPA URLs in the browser — session-cookie authentication depends on it.
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+### First-time setup
 
-## Code of Conduct
+```powershell
+copy .env.example .env          # then set DB_PASSWORD to a strong random value
+composer install
+php artisan key:generate
+docker compose -f docker-compose.db.yml up -d
+php artisan migrate
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+### Daily workflow
 
-## Security Vulnerabilities
+Run each in its own terminal (from this directory):
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```powershell
+docker compose -f docker-compose.db.yml up -d              # database (if not already running)
+php artisan serve --port=8000                               # API
+php artisan queue:work --queue=answers --tries=3            # answer-generation worker
+php artisan queue:work --queue=documents --tries=3          # document-processing worker
+```
 
-## License
+`queue:work` keeps the application in memory: after changing code, run `php artisan queue:restart` (or restart the worker terminals).
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Every job must declare its queue (`answers` or `documents`). A job pushed to the `default` queue is never picked up by these workers.
+
+## Local database
+
+The database container is defined in [`docker-compose.db.yml`](docker-compose.db.yml). It reads its credentials from `.env` — the same values Laravel uses.
+
+| Task | Command |
+|---|---|
+| Start | `docker compose -f docker-compose.db.yml up -d` |
+| Status / health | `docker compose -f docker-compose.db.yml ps` |
+| Logs | `docker compose -f docker-compose.db.yml logs -f db` |
+| SQL shell | `docker compose -f docker-compose.db.yml exec db psql -U askmydocs -d askmydocs` |
+| Check pgvector | `docker compose -f docker-compose.db.yml exec db psql -U askmydocs -d askmydocs -c "select extversion from pg_extension where extname = 'vector';"` |
+| Stop (keeps data) | `docker compose -f docker-compose.db.yml stop` |
+| Remove container (keeps data) | `docker compose -f docker-compose.db.yml down` |
+| Back up | `docker compose -f docker-compose.db.yml exec -T db pg_dump -U askmydocs -Fc askmydocs > askmydocs.dump` |
+
+**Data** lives in the named volume `askmydocs_pgdata` and survives `stop`, `down` and restarts.
+
+⚠️ `docker compose -f docker-compose.db.yml down -v` **deletes the volume and all data.**
+
+**First start only:** scripts in `docker/postgres/init/` run only when the volume is empty. They create the `askmydocs_test` database. Changing `DB_USERNAME`/`DB_PASSWORD` in `.env` after the first start does **not** change the existing database user; either alter it with `psql` or recreate the volume.
+
+**Upgrading pgvector:** change the image tag in `docker-compose.db.yml`, run `up -d`, then `ALTER EXTENSION vector UPDATE;` in each database. A major PostgreSQL upgrade (e.g. 18 → 19) requires a dump and restore.
+
+The container restarts automatically with Docker Desktop (`restart: unless-stopped`) unless you stopped it explicitly.
+
+## Tests
+
+```powershell
+php artisan test        # or: vendor/bin/pest
+vendor/bin/pint --test  # formatting check (vendor/bin/pint to fix)
+```
+
+Feature tests run against the `askmydocs_test` database (see `phpunit.xml`), never the development database: `tests/TestCase.php` aborts if the configured database name does not end in `_test`. The database container must be running.
+
+## Security notes
+
+- `.env` is not committed. It holds the database password and, later, the OpenAI API key.
+- The database port is bound to `127.0.0.1` only.
