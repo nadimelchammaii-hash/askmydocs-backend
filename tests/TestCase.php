@@ -26,4 +26,16 @@ abstract class TestCase extends BaseTestCase
 
         return $app;
     }
+
+    /**
+     * Send requests the way the SPA does. Sanctum only starts a session (cookie
+     * authentication) for requests whose Origin is a stateful domain.
+     */
+    protected function fromSpa(): static
+    {
+        return $this->withHeaders([
+            'Origin' => config('app.frontend_url'),
+            'Accept' => 'application/json',
+        ]);
+    }
 }
