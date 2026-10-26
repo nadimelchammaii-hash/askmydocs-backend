@@ -53,6 +53,7 @@ composer install
 php artisan key:generate
 docker compose -f docker-compose.db.yml up -d
 php artisan migrate
+php artisan boost:install       # optional: regenerates Laravel Boost AI skills (.claude/skills, not committed)
 ```
 
 ### Daily workflow
