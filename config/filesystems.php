@@ -38,6 +38,16 @@ return [
             'report' => false,
         ],
 
+        // Uploaded PDFs. Private: never web-accessible and never served by URL;
+        // files are only streamed to their owner through the documents API.
+        'documents' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/documents'),
+            'visibility' => 'private',
+            'throw' => true,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
