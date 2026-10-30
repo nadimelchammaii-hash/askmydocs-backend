@@ -25,6 +25,27 @@ Laravel runs **natively**. Only PostgreSQL runs in Docker, because pgvector is n
 - PHP 8.4 with the `pdo_pgsql`, `pgsql`, `mbstring`, `fileinfo` and `curl` extensions
 - Composer 2
 - Docker Desktop (running)
+- Poppler (`pdftotext`, `pdfinfo`) for PDF text extraction — see below
+- `php.ini`: `upload_max_filesize = 21M` and `post_max_size = 25M` (PHP's defaults of 2M/8M reject 20 MB PDFs before Laravel sees them)
+
+### Poppler (PDF text extraction)
+
+`pdftotext` extracts text page by page (pages are separated by form feeds, which is how answers can cite page numbers); `pdfinfo` reads the page count during upload validation.
+
+On Windows, no PATH change is needed:
+
+1. Download the latest `Release-*.zip` from <https://github.com/oschwartz10612/poppler-windows/releases>.
+2. Extract it, e.g. to `C:\tools\poppler-26.09.0`.
+3. Set absolute paths in `.env` — **use forward slashes** (inside double quotes a backslash is an escape character):
+
+   ```dotenv
+   PDFTOTEXT_BINARY=C:/tools/poppler-26.09.0/Library/bin/pdftotext.exe
+   PDFINFO_BINARY=C:/tools/poppler-26.09.0/Library/bin/pdfinfo.exe
+   ```
+
+4. Check: `& C:\tools\poppler-26.09.0\Library\bin\pdftotext.exe -v`
+
+On Linux/Docker, install `poppler-utils` and keep the defaults (`pdftotext` / `pdfinfo` from PATH). Tests that need the real binaries are skipped automatically when Poppler is not available.
 
 ### Ports
 

@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Models\User;
+use App\Services\Pdf\PdfTextExtractor;
+use App\Services\Pdf\PopplerPdfTextExtractor;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -18,7 +20,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(PdfTextExtractor::class, fn (): PdfTextExtractor => new PopplerPdfTextExtractor(
+            pdftotextBinary: config('documents.pdftotext_binary'),
+            pdfinfoBinary: config('documents.pdfinfo_binary'),
+            timeoutSeconds: config('documents.process_timeout'),
+        ));
     }
 
     /**
