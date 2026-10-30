@@ -92,6 +92,17 @@ php artisan queue:work --queue=documents --tries=3          # document-processin
 
 Every job must declare its queue (`answers` or `documents`). A job pushed to the `default` queue is never picked up by these workers.
 
+**Windows note:** PHP on Windows has no `pcntl` extension, so the worker cannot enforce a job's own `timeout`. PDF extraction is still bounded by the Poppler process timeout (`PDF_PROCESS_TIMEOUT`, 90 s). On Linux/Docker the job timeout (120 s) applies as well. Keep `DB_QUEUE_RETRY_AFTER` (180 s) above the job timeout.
+
+### Scheduled tasks
+
+`documents:prune-orphans` (hourly) deletes stored PDFs that no document refers to any more, e.g. after a failed file deletion. Run the scheduler in another terminal when you need it locally:
+
+```powershell
+php artisan schedule:work
+php artisan documents:prune-orphans --dry-run   # or run it once by hand; lists without deleting
+```
+
 ## Local database
 
 The database container is defined in [`docker-compose.db.yml`](docker-compose.db.yml). It reads its credentials from `.env` — the same values Laravel uses.

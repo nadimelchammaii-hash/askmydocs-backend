@@ -57,6 +57,7 @@ Every API error has the same shape:
 | 401 | `unauthenticated` | No valid session → treat as logged out |
 | 403 | `forbidden` | Authenticated but not allowed |
 | 404 | `not_found` | Resource does not exist **or belongs to another user** (see Ownership) |
+| 409 | `conflict` | The action does not fit the resource's current state (e.g. retrying a document that has not failed) |
 | 413 | `payload_too_large` | Request body above the server's limit (normally caught earlier as a 422 on `file`) |
 | 419 | `csrf_token_mismatch` | CSRF token missing/expired → call `/sanctum/csrf-cookie` and retry once |
 | 422 | `validation_failed` | Show `errors` next to form fields |
@@ -164,7 +165,8 @@ Clients poll `GET /documents/{id}` until `is_finished` is `true` (suggested: eve
 | `encrypted_pdf` | Needs a password to open |
 | `extraction_not_permitted` | The PDF forbids copying its text |
 | `no_text_layer` | No selectable text (e.g. a scan); OCR is not supported |
-| `extraction_timeout` / `extraction_failed` | Processing failed after retries |
+| `extraction_timeout` / `extraction_failed` | Processing failed after 3 attempts; retrying later may help |
+| `file_missing` | The stored file is gone; upload again |
 
 #### `GET /api/v1/documents`
 
@@ -198,6 +200,12 @@ Extracted text of page `n` (1-based); available once the document is `ready`. Us
 
 → `200` `{ "data": DocumentPage }`. → `404` if the page does not exist (yet).
 
+#### `POST /api/v1/documents/{id}/retry`
+
+Re-queues processing of a `failed` document (rate limit shared with uploads). Retrying makes most sense for `extraction_timeout` / `extraction_failed`; problems with the file itself fail again.
+
+→ `202` `{ "data": Document }` with `status: "queued"`. → `409 conflict` if the document is not `failed`.
+
 #### `DELETE /api/v1/documents/{id}`
 
 Permanently deletes the document, its file and its extracted text (later also its conversations). → `204`
@@ -217,7 +225,7 @@ interface User {
 type DocumentStatus = 'queued' | 'extracting' | 'ready' | 'failed'
 
 interface Document {
-  id: string // ULID
+  id: string // ULID, lowercase
   title: string
   original_filename: string
   size_bytes: number

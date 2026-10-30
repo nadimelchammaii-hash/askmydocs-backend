@@ -1,17 +1,20 @@
 <?php
 
 use App\Enums\DocumentStatus;
+use App\Jobs\ExtractDocumentText;
 use App\Models\Document;
 use App\Models\User;
 use App\Services\Pdf\PdfExtractionException;
 use App\Services\Pdf\PdfInfo;
 use App\Services\Pdf\PdfTextExtractor;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Tests\Support\PdfFixture;
 
 beforeEach(function () {
     Storage::fake(config('documents.disk'));
+    Queue::fake();
     $this->user = User::factory()->create();
 });
 
@@ -74,12 +77,15 @@ it('stores the file and creates a queued document', function () {
     $document = Document::sole();
 
     expect($document->id)->toBe($response->json('data.id'))
+        ->and($document->id)->toBe(strtolower($document->id)) // same ULID format as model-generated IDs
         ->and($document->user_id)->toBe($this->user->id)
         ->and($document->status)->toBe(DocumentStatus::Queued)
         ->and($document->storage_path)->toBe("{$this->user->id}/{$document->id}.pdf")
         ->and($document->size_bytes)->toBe(strlen(PdfFixture::bytes(['Annual report text on page one.'])))
         ->and($document->sha256)->toBe($sha256)
         ->and(storedFiles())->toBe([$document->storage_path]);
+
+    Queue::assertPushedOn('documents', ExtractDocumentText::class, fn (ExtractDocumentText $job) => $job->document->is($document));
 });
 
 it('uses the given title', function () {
@@ -121,6 +127,7 @@ it('rejects files that are not PDFs without running Poppler', function (Closure 
         ->assertJsonPath('errors.file.0', $message);
 
     expect(storedFiles())->toBe([])->and(Document::count())->toBe(0);
+    Queue::assertNothingPushed();
 })->with([
     'missing file' => [fn () => null, 'The file field is required.'],
     'executable renamed to .pdf' => [

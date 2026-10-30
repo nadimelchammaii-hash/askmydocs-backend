@@ -37,6 +37,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('{document}', 'show')->can('view', 'document')->name('show');
         Route::get('{document}/file', 'file')->can('view', 'document')->name('file');
         Route::get('{document}/pages/{pageNumber}', 'page')->whereNumber('pageNumber')->can('view', 'document')->name('pages.show');
+        Route::post('{document}/retry', 'retry')->middleware('throttle:uploads')->can('retry', 'document')->name('retry');
         Route::delete('{document}', 'destroy')->can('delete', 'document')->name('destroy');
     });
 });

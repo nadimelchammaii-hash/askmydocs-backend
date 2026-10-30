@@ -17,7 +17,7 @@ it('identifies documents by ULID and starts them as queued', function () {
 it('stores files under the owner id with a generated name', function () {
     $document = Document::factory()->create(['original_filename' => '../../etc/passwd.pdf']);
 
-    expect($document->storage_path)->toMatch('#^'.$document->user_id.'/[0-9A-Z]{26}\.pdf$#');
+    expect($document->storage_path)->toMatch('#^'.$document->user_id.'/[0-9a-z]{26}\.pdf$#');
 });
 
 it('returns pages in page order', function () {

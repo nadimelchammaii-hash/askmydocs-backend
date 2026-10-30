@@ -24,7 +24,7 @@ class DocumentFactory extends Factory
             'user_id' => User::factory(),
             'title' => $title,
             'original_filename' => Str::slug($title).'.pdf',
-            'storage_path' => fn (array $attributes) => $attributes['user_id'].'/'.Str::ulid().'.pdf',
+            'storage_path' => fn (array $attributes) => $attributes['user_id'].'/'.Str::lower((string) Str::ulid()).'.pdf',
             'size_bytes' => fake()->numberBetween(10_000, 5_000_000),
             'sha256' => hash('sha256', Str::random(40)),
             'status' => DocumentStatus::Queued,

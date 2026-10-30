@@ -3,6 +3,7 @@
 namespace App\Actions\Documents;
 
 use App\Enums\DocumentStatus;
+use App\Jobs\ExtractDocumentText;
 use App\Models\Document;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
@@ -11,7 +12,8 @@ use Illuminate\Support\Str;
 use Throwable;
 
 /**
- * Saves a validated PDF upload: first the file, then the database row.
+ * Saves a validated PDF upload (first the file, then the database row) and
+ * queues its text extraction.
  *
  * The file is named after the document's ULID (never the client's filename), so
  * user input never reaches a filesystem path. If the row cannot be created, the
@@ -21,7 +23,8 @@ class StoreDocument
 {
     public function handle(User $user, UploadedFile $file, int $pageCount, ?string $title = null): Document
     {
-        $id = (string) Str::ulid();
+        // Same generator as the model (lowercase ULID), so every document ID has one format.
+        $id = (new Document)->newUniqueId();
         $disk = Storage::disk(config('documents.disk'));
         $path = $disk->putFileAs((string) $user->id, $file, "{$id}.pdf");
         $originalFilename = $this->cleanFilename($file->getClientOriginalName());
@@ -44,6 +47,8 @@ class StoreDocument
 
             throw $exception;
         }
+
+        ExtractDocumentText::dispatch($document);
 
         return $document;
     }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Documents\DeleteDocument;
+use App\Actions\Documents\RetryDocument;
 use App\Actions\Documents\StoreDocument;
 use App\Http\Requests\Documents\StoreDocumentRequest;
 use App\Http\Resources\DocumentPageResource;
@@ -73,6 +74,11 @@ class DocumentController extends Controller
         return new DocumentPageResource(
             $document->pages()->where('page_number', $pageNumber)->firstOrFail(),
         );
+    }
+
+    public function retry(Document $document, RetryDocument $retryDocument): JsonResponse
+    {
+        return (new DocumentResource($retryDocument->handle($document)))->response()->setStatusCode(202);
     }
 
     public function destroy(Document $document, DeleteDocument $deleteDocument): Response
