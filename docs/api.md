@@ -5,7 +5,7 @@ Source of truth for the API used by **askmydocs-frontend**. The two applications
 - **Base URL (local):** `http://localhost:8000`
 - **API prefix:** `/api/v1`
 - **Format:** JSON requests and responses. Send `Accept: application/json`.
-- **Status:** Phase 1 — authentication and profile. Documents, conversations and messages are added in later phases.
+- **Status:** Phase 2 — authentication, profile and documents. Conversations and messages are added in later phases.
 
 ## Authentication model
 
@@ -57,6 +57,7 @@ Every API error has the same shape:
 | 401 | `unauthenticated` | No valid session → treat as logged out |
 | 403 | `forbidden` | Authenticated but not allowed |
 | 404 | `not_found` | Resource does not exist **or belongs to another user** (see Ownership) |
+| 413 | `payload_too_large` | Request body above the server's limit (normally caught earlier as a 422 on `file`) |
 | 419 | `csrf_token_mismatch` | CSRF token missing/expired → call `/sanctum/csrf-cookie` and retry once |
 | 422 | `validation_failed` | Show `errors` next to form fields |
 | 429 | `too_many_requests` | Rate limited; `Retry-After` header gives seconds to wait |
@@ -146,6 +147,63 @@ Any subset of:
 
 → `204`. → `422` with `errors.current_password` if the current password is wrong. Other sessions of the user are logged out on their next request.
 
+### Documents (all authenticated)
+
+A document goes through these statuses after upload:
+
+```
+queued -> extracting -> ready
+              \-> failed   (error_code + error_message say why)
+```
+
+Clients poll `GET /documents/{id}` until `is_finished` is `true` (suggested: every 2–3 s, backing off). When `failed`, show `error_message`; branch on `error_code`:
+
+| `error_code` | Meaning |
+|---|---|
+| `invalid_pdf` | File is damaged or not a real PDF |
+| `encrypted_pdf` | Needs a password to open |
+| `extraction_not_permitted` | The PDF forbids copying its text |
+| `no_text_layer` | No selectable text (e.g. a scan); OCR is not supported |
+| `extraction_timeout` / `extraction_failed` | Processing failed after retries |
+
+#### `GET /api/v1/documents`
+
+The user's documents, newest first, 20 per page (`?page=2`).
+
+→ `200` `{ "data": Document[], "links": {...}, "meta": { "current_page", "last_page", "per_page", "total", ... } }`
+
+#### `POST /api/v1/documents`
+
+`multipart/form-data`. Rate limit: 10/min per user.
+
+| Field | Rules |
+|---|---|
+| `file` | Required. A PDF (checked by content, not just the name), at most 20 MB and 300 pages, not password-protected |
+| `title` | Optional, max 255 characters. Default: the filename without `.pdf` |
+
+→ `202` `{ "data": Document }` with `status: "queued"`: stored, text extraction pending.
+→ `422` with `errors.file` (single message), e.g. "The file must be a PDF.", "The file may not be larger than 20 MB.", "This PDF has 412 pages; the maximum is 300.", "This PDF is password-protected. Remove the password and upload it again."
+
+#### `GET /api/v1/documents/{id}`
+
+→ `200` `{ "data": Document }`
+
+#### `GET /api/v1/documents/{id}/file`
+
+The original PDF: `Content-Type: application/pdf`, `Content-Disposition: inline`, not cacheable. → `200` (binary). Fetch it with credentials (e.g. axios `responseType: 'blob'`) and display it via an object URL.
+
+#### `GET /api/v1/documents/{id}/pages/{n}`
+
+Extracted text of page `n` (1-based); available once the document is `ready`. Used to show a citation's context.
+
+→ `200` `{ "data": DocumentPage }`. → `404` if the page does not exist (yet).
+
+#### `DELETE /api/v1/documents/{id}`
+
+Permanently deletes the document, its file and its extracted text (later also its conversations). → `204`
+
+All `{id}` endpoints answer `404 not_found` for unknown, malformed and other users' IDs.
+
 ## Types
 
 ```ts
@@ -154,6 +212,35 @@ interface User {
   name: string
   email: string
   created_at: string // ISO 8601
+}
+
+type DocumentStatus = 'queued' | 'extracting' | 'ready' | 'failed'
+
+interface Document {
+  id: string // ULID
+  title: string
+  original_filename: string
+  size_bytes: number
+  page_count: number | null
+  status: DocumentStatus
+  is_finished: boolean // ready or failed: stop polling
+  error_code: string | null
+  error_message: string | null
+  created_at: string
+  processed_at: string | null
+}
+
+interface DocumentPage {
+  document_id: string
+  page_number: number
+  text: string
+  char_count: number
+}
+
+interface Paginated<T> {
+  data: T[]
+  links: { first: string; last: string; prev: string | null; next: string | null }
+  meta: { current_page: number; last_page: number; per_page: number; total: number; from: number | null; to: number | null }
 }
 
 interface ApiError {

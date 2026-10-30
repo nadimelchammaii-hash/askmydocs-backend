@@ -2,6 +2,8 @@
 
 namespace Tests\Support;
 
+use Illuminate\Http\UploadedFile;
+
 /**
  * Builds small, valid PDF files for tests, so no binary fixtures need to be
  * committed. Each array item is one page; an empty string produces a page
@@ -9,6 +11,9 @@ namespace Tests\Support;
  */
 final class PdfFixture
 {
+    /** @var list<string> */
+    private static array $temporaryFiles = [];
+
     /**
      * @param  list<string>  $pages
      */
@@ -62,6 +67,26 @@ final class PdfFixture
         file_put_contents($path, self::bytes($pages));
 
         return $path;
+    }
+
+    /**
+     * A real uploaded file (not UploadedFile::fake(), whose MIME type is guessed
+     * from the filename): validation inspects the actual bytes, as in production.
+     * Call cleanUp() after the test.
+     */
+    public static function upload(string $clientName, string $bytes): UploadedFile
+    {
+        $path = tempnam(sys_get_temp_dir(), 'upload-');
+        file_put_contents($path, $bytes);
+        self::$temporaryFiles[] = $path;
+
+        return new UploadedFile($path, $clientName, test: true);
+    }
+
+    public static function cleanUp(): void
+    {
+        array_map(fn (string $path) => @unlink($path), self::$temporaryFiles);
+        self::$temporaryFiles = [];
     }
 
     private static function contentStream(string $text): string

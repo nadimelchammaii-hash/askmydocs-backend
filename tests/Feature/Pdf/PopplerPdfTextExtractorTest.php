@@ -24,15 +24,6 @@ function extractionError(Closure $callback): PdfExtractionException
     throw new RuntimeException('Expected a PdfExtractionException.');
 }
 
-function popplerAvailable(): bool
-{
-    try {
-        return Process::run([config('documents.pdftotext_binary'), '-v'])->successful();
-    } catch (Throwable) {
-        return false;
-    }
-}
-
 describe('with faked Poppler processes', function () {
     beforeEach(fn () => Process::preventStrayProcesses());
 

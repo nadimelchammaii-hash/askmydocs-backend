@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Process;
 use Tests\TestCase;
 
 /*
@@ -16,3 +17,19 @@ use Tests\TestCase;
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->in('Feature');
+
+/*
+|--------------------------------------------------------------------------
+| Helpers
+|--------------------------------------------------------------------------
+*/
+
+/** Whether the configured Poppler binaries can run (tests that need them are skipped otherwise). */
+function popplerAvailable(): bool
+{
+    try {
+        return Process::run([config('documents.pdftotext_binary'), '-v'])->successful();
+    } catch (Throwable) {
+        return false;
+    }
+}

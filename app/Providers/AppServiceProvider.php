@@ -63,6 +63,11 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('login', function (Request $request): Limit {
             return Limit::perMinute(5)->by(Str::lower((string) $request->input('email')).'|'.$request->ip());
         });
+
+        // Each upload stores up to 20 MB and runs pdfinfo, so uploads are limited per user.
+        RateLimiter::for('uploads', function (Request $request): Limit {
+            return Limit::perMinute(10)->by((string) $request->user()?->id ?: $request->ip());
+        });
     }
 
     /**
