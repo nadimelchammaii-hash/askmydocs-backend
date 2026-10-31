@@ -5,15 +5,14 @@ namespace App\Enums;
 /**
  * Processing lifecycle of an uploaded document:
  *
- *   Queued -> Extracting -> Ready
- *                 \-> Failed (error_code / error_message say why)
- *
- * Phase 3 adds an embedding step between Extracting and Ready.
+ *   Queued -> Extracting -> Embedding -> Ready
+ *                 \------------\-> Failed (error_code / error_message say why)
  */
 enum DocumentStatus: string
 {
     case Queued = 'queued';
     case Extracting = 'extracting';
+    case Embedding = 'embedding';
     case Ready = 'ready';
     case Failed = 'failed';
 

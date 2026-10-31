@@ -153,11 +153,11 @@ Any subset of:
 A document goes through these statuses after upload:
 
 ```
-queued -> extracting -> ready
-              \-> failed   (error_code + error_message say why)
+queued -> extracting -> embedding -> ready
+              \------------\-> failed   (error_code + error_message say why)
 ```
 
-Clients poll `GET /documents/{id}` until `is_finished` is `true` (suggested: every 2–3 s, backing off). When `failed`, show `error_message`; branch on `error_code`:
+New statuses may be added between `queued` and `ready`; clients should rely on `is_finished`, not on a fixed list. Clients poll `GET /documents/{id}` until `is_finished` is `true` (suggested: every 2–3 s, backing off). When `failed`, show `error_message`; branch on `error_code`:
 
 | `error_code` | Meaning |
 |---|---|
@@ -222,7 +222,7 @@ interface User {
   created_at: string // ISO 8601
 }
 
-type DocumentStatus = 'queued' | 'extracting' | 'ready' | 'failed'
+type DocumentStatus = 'queued' | 'extracting' | 'embedding' | 'ready' | 'failed'
 
 interface Document {
   id: string // ULID, lowercase

@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
-    'user_id', 'title', 'original_filename', 'storage_path', 'size_bytes', 'sha256', 'page_count',
+    'user_id', 'title', 'original_filename', 'storage_path', 'size_bytes', 'sha256', 'page_count', 'embedding_model',
     'status', 'error_code', 'error_message', 'processing_started_at', 'processed_at',
 ])]
 class Document extends Model
@@ -48,6 +48,14 @@ class Document extends Model
     public function pages(): HasMany
     {
         return $this->hasMany(DocumentPage::class)->orderBy('page_number');
+    }
+
+    /**
+     * @return HasMany<DocumentChunk, $this>
+     */
+    public function chunks(): HasMany
+    {
+        return $this->hasMany(DocumentChunk::class)->orderBy('chunk_index');
     }
 
     public function isOwnedBy(User $user): bool
