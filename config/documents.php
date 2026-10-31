@@ -49,4 +49,21 @@ return [
 
     'process_timeout' => (int) env('PDF_PROCESS_TIMEOUT', 90),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Chunking
+    |--------------------------------------------------------------------------
+    |
+    | Page text is split into chunks for embedding, measured in characters
+    | (about 4 characters per token for English). A chunk never spans pages.
+    | Changing these only affects documents processed afterwards.
+    |
+    */
+
+    'chunking' => [
+        'target_chars' => (int) env('CHUNK_TARGET_CHARS', 1500),
+        'max_chars' => (int) env('CHUNK_MAX_CHARS', 2000),
+        'overlap_chars' => (int) env('CHUNK_OVERLAP_CHARS', 200),
+    ],
+
 ];

@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\User;
+use App\Services\Chunking\TextChunker;
 use App\Services\Pdf\PdfTextExtractor;
 use App\Services\Pdf\PopplerPdfTextExtractor;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -24,6 +25,12 @@ class AppServiceProvider extends ServiceProvider
             pdftotextBinary: config('documents.pdftotext_binary'),
             pdfinfoBinary: config('documents.pdfinfo_binary'),
             timeoutSeconds: config('documents.process_timeout'),
+        ));
+
+        $this->app->bind(TextChunker::class, fn (): TextChunker => new TextChunker(
+            targetChars: config('documents.chunking.target_chars'),
+            maxChars: config('documents.chunking.max_chars'),
+            overlapChars: config('documents.chunking.overlap_chars'),
         ));
     }
 
