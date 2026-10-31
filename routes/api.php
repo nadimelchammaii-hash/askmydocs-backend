@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Auth\SessionController;
+use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
@@ -39,5 +40,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('{document}/pages/{pageNumber}', 'page')->whereNumber('pageNumber')->can('view', 'document')->name('pages.show');
         Route::post('{document}/retry', 'retry')->middleware('throttle:uploads')->can('retry', 'document')->name('retry');
         Route::delete('{document}', 'destroy')->can('delete', 'document')->name('destroy');
+    });
+
+    Route::controller(ConversationController::class)->group(function () {
+        Route::post('documents/{document}/conversations', 'store')
+            ->middleware('throttle:questions')->can('view', 'document')->name('conversations.store');
+        Route::post('conversations/{conversation}/questions', 'ask')
+            ->middleware('throttle:questions')->can('ask', 'conversation')->name('conversations.ask');
+        // scopeBindings: the message must belong to this conversation, or 404.
+        Route::get('conversations/{conversation}/messages/{message}', 'message')
+            ->scopeBindings()->can('view', 'conversation')->name('conversations.messages.show');
     });
 });

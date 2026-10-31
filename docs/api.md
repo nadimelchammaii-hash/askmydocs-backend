@@ -57,11 +57,12 @@ Every API error has the same shape:
 | 401 | `unauthenticated` | No valid session → treat as logged out |
 | 403 | `forbidden` | Authenticated but not allowed |
 | 404 | `not_found` | Resource does not exist **or belongs to another user** (see Ownership) |
-| 409 | `conflict` | The action does not fit the resource's current state (e.g. retrying a document that has not failed) |
+| 409 | `conflict`, or a specific code | The action does not fit the current state. Specific codes: `document_not_ready`, `answer_pending` |
 | 413 | `payload_too_large` | Request body above the server's limit (normally caught earlier as a 422 on `file`) |
 | 419 | `csrf_token_mismatch` | CSRF token missing/expired → call `/sanctum/csrf-cookie` and retry once |
 | 422 | `validation_failed` | Show `errors` next to form fields |
 | 429 | `too_many_requests` | Rate limited; `Retry-After` header gives seconds to wait |
+| 429 | `daily_limit_reached` | Daily question limit reached; try again tomorrow |
 | 500 | `server_error` | Generic message only; details are in the server log |
 
 Clients should branch on `code` (stable), not on `message` (wording may change).
@@ -209,9 +210,45 @@ Re-queues processing of a `failed` document (rate limit shared with uploads). Re
 
 #### `DELETE /api/v1/documents/{id}`
 
-Permanently deletes the document, its file and its extracted text (later also its conversations). → `204`
+Permanently deletes the document, its file, its extracted text and all its conversations. → `204`
 
 All `{id}` endpoints answer `404 not_found` for unknown, malformed and other users' IDs.
+
+### Questions and answers (all authenticated)
+
+A conversation belongs to one document. Answers are generated in the background:
+
+1. Ask (start a conversation, or a follow-up). → `202` with the question and a **pending** answer.
+2. Poll `GET /conversations/{id}/messages/{answerId}` until `is_finished` is `true` (suggested: every 1–2 s; answers usually take a few seconds).
+3. Show `content` with its citations, or `error_message` if `status` is `failed`.
+
+**Answer text and citations.** `content` contains markers `[1]`, `[2]` … that refer to `citations[].number`. Each citation has the page and a short quote that the server verified to appear on that page. Render `content` as **plain text only** (never HTML or Markdown): it can contain text from the PDF. When `answer_found` is `false`, `content` explains that the document does not contain the answer and `citations` is empty.
+
+Limits: questions up to 1,000 characters; 10 questions per minute and 100 per day per user (→ `429`, see error codes); one pending answer per conversation.
+
+#### `POST /api/v1/documents/{id}/conversations`
+
+```json
+{ "question": "What is the refund policy?" }
+```
+
+→ `202` `{ "data": Conversation }` with `messages: [question, pendingAnswer]`. The title is taken from the question.
+→ `409 document_not_ready` if the document is not `ready`. → `422` with `errors.question`.
+
+#### `POST /api/v1/conversations/{id}/questions`
+
+```json
+{ "question": "And do I need a receipt?" }
+```
+
+The last two exchanges are used to understand follow-ups. → `202` `{ "data": { "question": Message, "answer": Message } }` (answer pending).
+→ `409 answer_pending` while the previous answer is still pending. → `409 document_not_ready`. → `422`.
+
+#### `GET /api/v1/conversations/{id}/messages/{messageId}`
+
+→ `200` `{ "data": Message }`. → `404` if the message does not belong to that conversation.
+
+Failed answers carry `error_code`: `answer_failed` (try again), `answer_refused` (rephrase the question) or `document_not_ready`.
 
 ## Types
 
@@ -250,6 +287,38 @@ interface Paginated<T> {
   data: T[]
   links: { first: string; last: string; prev: string | null; next: string | null }
   meta: { current_page: number; last_page: number; per_page: number; total: number; from: number | null; to: number | null }
+}
+
+type MessageRole = 'user' | 'assistant'
+type MessageStatus = 'pending' | 'completed' | 'failed'
+
+interface Citation {
+  number: number // the [n] marker in content
+  page_number: number
+  quote: string // verified to appear on that page
+}
+
+interface Message {
+  id: string // ULID
+  conversation_id: string
+  role: MessageRole
+  status: MessageStatus
+  is_finished: boolean
+  content: string | null // plain text; null while pending
+  answer_found: boolean | null // assistant messages only
+  error_code: string | null
+  error_message: string | null
+  citations: Citation[] // empty for questions
+  created_at: string
+}
+
+interface Conversation {
+  id: string // ULID
+  document_id: string
+  title: string
+  messages?: Message[] // oldest first
+  created_at: string
+  updated_at: string
 }
 
 interface ApiError {

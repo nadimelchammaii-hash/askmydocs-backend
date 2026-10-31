@@ -96,6 +96,19 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(5)->by(Str::lower((string) $request->input('email')).'|'.$request->ip());
         });
 
+        // Every question can cost an OpenAI call: limit bursts and daily volume per user.
+        RateLimiter::for('questions', function (Request $request): array {
+            $key = (string) $request->user()?->id ?: $request->ip();
+
+            return [
+                Limit::perMinute(config('answers.questions_per_minute'))->by($key),
+                Limit::perDay(config('answers.questions_per_day'))->by($key)->response(fn () => response()->json([
+                    'message' => 'You have reached today\x27s question limit. Please try again tomorrow.',
+                    'code' => 'daily_limit_reached',
+                ], 429)),
+            ];
+        });
+
         // Each upload stores up to 20 MB and runs pdfinfo, so uploads are limited per user.
         RateLimiter::for('uploads', function (Request $request): Limit {
             return Limit::perMinute(10)->by((string) $request->user()?->id ?: $request->ip());
