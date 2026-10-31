@@ -103,6 +103,14 @@ php artisan schedule:work
 php artisan documents:prune-orphans --dry-run   # or run it once by hand; lists without deleting
 ```
 
+### Developer tools
+
+```powershell
+php artisan documents:search <document-id> "What is the refund policy?" --limit=5
+```
+
+Shows which chunks a question retrieves from a ready document, with page and similarity. It embeds the question through OpenAI, so it needs `OPENAI_API_KEY` and costs a tiny amount per run.
+
 ## Local database
 
 The database container is defined in [`docker-compose.db.yml`](docker-compose.db.yml). It reads its credentials from `.env` — the same values Laravel uses.
