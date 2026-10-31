@@ -10,8 +10,12 @@ return [
     | top_k: chunks sent to the model as sources.
     | min_similarity: if even the best chunk scores below this (cosine
     | similarity, 0..1), the question is answered with "not found" without
-    | calling the model. Calibrated on real data: relevant chunks scored
-    | 0.29-0.43 and unrelated ones 0.10-0.18 with text-embedding-3-small.
+    | calling the model. Measured with text-embedding-3-small: relevant chunks
+    | scored 0.29-0.55, unrelated ones 0.10-0.18 for a standalone question.
+    | Inside a conversation the previous question is included in the search,
+    | which can lift unrelated questions to ~0.5; there, the model's own
+    | "answer_found" judgement is the real guard. This threshold only saves
+    | the call for clearly unrelated first questions.
     |
     */
 
