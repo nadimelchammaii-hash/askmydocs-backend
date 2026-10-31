@@ -34,15 +34,17 @@ it('hides internal details of server errors', function () {
 });
 
 it('allows CORS with credentials from the frontend origin only', function () {
+    $frontend = config('app.frontend_url');
+
     $this->withHeaders([
-        'Origin' => 'http://localhost:3000',
+        'Origin' => $frontend,
         'Access-Control-Request-Method' => 'POST',
     ])->options('/api/v1/auth/login')
-        ->assertHeader('Access-Control-Allow-Origin', 'http://localhost:3000')
+        ->assertHeader('Access-Control-Allow-Origin', $frontend)
         ->assertHeader('Access-Control-Allow-Credentials', 'true');
 
     // With a single allowed origin the header is static, so a foreign site receives
-    // "http://localhost:3000", which its browser rejects. It must never be echoed back.
+    // the frontend's origin, which its browser rejects. It must never be echoed back.
     $foreign = $this->withHeaders([
         'Origin' => 'https://evil.example',
         'Access-Control-Request-Method' => 'POST',

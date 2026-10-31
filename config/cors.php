@@ -21,7 +21,7 @@ return [
 
     // Only the SPA may call the API from a browser. A wildcard is not allowed together
     // with credentials (cookies), and would let any website use a visitor's session.
-    'allowed_origins' => [env('FRONTEND_URL', 'http://localhost:3000')],
+    'allowed_origins' => [env('FRONTEND_URL', 'http://localhost:5173')],
 
     'allowed_origins_patterns' => [],
 

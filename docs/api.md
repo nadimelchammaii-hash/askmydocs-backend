@@ -22,7 +22,7 @@ Requirements for the client:
 2. Send credentials with every request (axios: `withCredentials: true`, `withXSRFToken: true`).
 3. Call `GET /sanctum/csrf-cookie` once before the first state-changing request (login/register). It returns `204` and sets `XSRF-TOKEN`.
 4. Every `POST`/`PUT`/`PATCH`/`DELETE` must send the `X-XSRF-TOKEN` header (axios does this automatically when `withXSRFToken` is enabled).
-5. The browser sends the `Origin` header automatically; only origins listed in `SANCTUM_STATEFUL_DOMAINS` (`localhost:3000`) get session authentication, and only `FRONTEND_URL` is allowed by CORS.
+5. The browser sends the `Origin` header automatically; only origins listed in `SANCTUM_STATEFUL_DOMAINS` (`localhost:5173`) get session authentication, and only `FRONTEND_URL` is allowed by CORS.
 
 After logout, the CSRF token is rotated; call `/sanctum/csrf-cookie` again before the next login.
 

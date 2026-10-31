@@ -1,0 +1,118 @@
+# Full LOCAL DEVELOPMENT stack in Docker Desktop: database, API, queue workers,
+# scheduler and the Vue SPA. Usage: see "Running with Docker" in README.md.
+#
+#   docker compose up -d --build      # start everything (first run builds the images)
+#
+# - Source code is mounted from the host, so edits apply without rebuilding.
+#   (Queue workers keep code in memory: `docker compose restart worker-answers worker-documents`.)
+# - Laravel reads this directory's .env as usual. Only the settings that differ inside
+#   Docker are overridden below (real environment variables take precedence over .env).
+# - Compose also reads .env for the ${...} values (database credentials).
+# - The SPA repository must be next to this one: ../askmydocs-frontend
+# - Every port is bound to 127.0.0.1, so nothing is reachable from the network.
+
+name: askmydocs
+
+# Shared by the API, workers and scheduler. Only `api` builds the image; the others reuse it.
+x-php: &php
+  image: askmydocs-php:dev
+  pull_policy: never
+  restart: unless-stopped
+  volumes:
+    - .:/app
+    # Linux Composer packages in a volume, kept apart from the Windows vendor/ folder.
+    - askmydocs_vendor:/app/vendor
+  environment:
+    DB_HOST: db
+    DB_PORT: 5432
+    PDFTOTEXT_BINARY: pdftotext
+    PDFINFO_BINARY: pdfinfo
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    # Pinned pgvector release on PostgreSQL 18 so rebuilds are reproducible.
+    image: pgvector/pgvector:0.8.7-pg18
+    container_name: askmydocs-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:?Set DB_DATABASE in .env}
+      POSTGRES_USER: ${DB_USERNAME:?Set DB_USERNAME in .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    ports:
+      # Still published for database tools and for running Laravel natively on Windows.
+      # 5432 on the host is used by the native PostgreSQL service, hence 5433.
+      - "127.0.0.1:${DB_HOST_PORT:-5433}:5432"
+    volumes:
+      # PostgreSQL 18 images store data under /var/lib/postgresql/18/docker,
+      # so the volume is mounted at /var/lib/postgresql (not .../data as in older images).
+      - askmydocs_pgdata:/var/lib/postgresql
+      # Runs once, only when the volume is empty (first start).
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    <<: *php
+    build: ./docker/php
+    pull_policy: missing   # build only when the image does not exist yet (or with --build)
+    container_name: askmydocs-api
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      PDFTOTEXT_BINARY: pdftotext
+      PDFINFO_BINARY: pdfinfo
+      # Lets the dev server handle several requests at once (e.g. polling while uploading).
+      PHP_CLI_SERVER_WORKERS: 4
+    # --no-reload is required for several workers; restart `api` after editing .env.
+    command: ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000", "--no-reload"]
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  worker-answers:
+    <<: *php
+    container_name: askmydocs-worker-answers
+    command: ["php", "artisan", "queue:work", "--queue=answers", "--tries=3"]
+
+  worker-documents:
+    <<: *php
+    container_name: askmydocs-worker-documents
+    command: ["php", "artisan", "queue:work", "--queue=documents", "--tries=3"]
+
+  scheduler:
+    <<: *php
+    container_name: askmydocs-scheduler
+    command: ["php", "artisan", "schedule:work"]
+
+  frontend:
+    build:
+      context: ../askmydocs-frontend
+      dockerfile: docker/Dockerfile.dev
+    image: askmydocs-frontend:dev
+    container_name: askmydocs-frontend
+    restart: unless-stopped
+    volumes:
+      - ../askmydocs-frontend:/app
+      # Linux npm packages in a volume, kept apart from the Windows node_modules/ folder.
+      - askmydocs_node_modules:/app/node_modules
+    environment:
+      VITE_DEV_POLLING: "true"
+      # The browser (on Windows) calls the API through the published port.
+      VITE_API_BASE_URL: http://localhost:8000
+    ports:
+      - "127.0.0.1:5173:5173"
+    depends_on:
+      - api
+
+volumes:
+  askmydocs_pgdata:
+    name: askmydocs_pgdata
+  askmydocs_vendor:
+    name: askmydocs_vendor
+  askmydocs_node_modules:
+    name: askmydocs_node_modules

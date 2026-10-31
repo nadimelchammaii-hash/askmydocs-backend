@@ -11,14 +11,52 @@ The UI is a separate application in its own repository: **askmydocs-frontend** (
 | Concern | Choice |
 |---|---|
 | Framework | Laravel 13, PHP 8.4 |
-| Database | PostgreSQL 18 + pgvector (database-only Docker container during development) |
+| Database | PostgreSQL 18 + pgvector |
+| Local environment | Docker Compose: database, API, queue workers, scheduler and the SPA dev server |
 | Queue | Laravel `database` driver, workers on the `answers` and `documents` queues |
 | Tests | Pest, against a real PostgreSQL test database |
 | Formatting | Laravel Pint |
 
-## Local development (Windows)
+## Running with Docker (recommended)
 
-Laravel runs **natively**. Only PostgreSQL runs in Docker, because pgvector is not readily available for native PostgreSQL on Windows. The full application is containerized later (Phase 9).
+[`compose.yaml`](compose.yaml) runs the whole stack in Docker Desktop. Only Docker Desktop is needed on the host; PHP, Composer, Poppler and Node run inside the containers.
+
+| Service | Container | What it runs |
+|---|---|---|
+| `db` | `askmydocs-db` | PostgreSQL 18 + pgvector, host port `5433` |
+| `api` | `askmydocs-api` | `php artisan serve`, <http://localhost:8000> |
+| `worker-answers` | `askmydocs-worker-answers` | `queue:work --queue=answers` |
+| `worker-documents` | `askmydocs-worker-documents` | `queue:work --queue=documents` |
+| `scheduler` | `askmydocs-scheduler` | `schedule:work` (hourly orphan-file cleanup) |
+| `frontend` | `askmydocs-frontend` | Vite dev server, <http://localhost:5173> |
+
+Requirements: the SPA repository next to this one (`../askmydocs-frontend`), and this directory's `.env` (see "First-time setup" below for its values; `OPENAI_API_KEY` is needed for uploads and answers).
+
+```powershell
+docker compose up -d --build                               # first start: builds the images, installs Composer/npm packages
+docker compose ps                                          # status
+docker compose logs -f api worker-documents                # logs
+docker compose exec api php artisan migrate                # first time, and after adding migrations
+docker compose exec api php artisan test                   # backend tests (uses the askmydocs_test database)
+docker compose exec frontend npm test                      # frontend tests
+docker compose restart worker-answers worker-documents     # after changing job/service code (workers keep code in memory)
+docker compose stop                                        # stop everything (data is kept)
+```
+
+How it is set up:
+
+- **Code is mounted, not copied.** Edits on Windows apply immediately (the Vite dev server reloads the page; PHP picks up changes on the next request).
+- **`.env` stays the single configuration file.** Laravel reads it as usual; compose overrides only what differs inside Docker (`DB_HOST=db`, `DB_PORT=5432`, the Poppler paths). Real environment variables take precedence over `.env`, so the same file still works for native development. No secret is copied into an image.
+- **Dependencies live in Docker volumes** (`askmydocs_vendor`, `askmydocs_node_modules`), separate from the Windows `vendor/` and `node_modules/` folders. They are installed automatically on start when missing or when the lock file changed.
+- **All ports are bound to `127.0.0.1`**, so nothing is reachable from the network. The API and SPA keep their usual URLs (`localhost:8000`, `localhost:5173`), so cookies, CORS and Sanctum work the same as natively.
+- **Linux has `pcntl`**, so job timeouts (extraction 120 s, embedding 240 s) are enforced by the workers.
+- Uploaded PDFs are stored in `storage/app/private` on the host, as before.
+
+This is a development setup (dev servers, mounted code). Production images are prepared in Phase 9.
+
+## Alternative: native development (Windows)
+
+Laravel can also run **natively** on Windows, with only the database in Docker (`docker compose up -d db`). Do not run both at once: the native `php artisan serve` and `npm run dev` use the same ports (8000, 5173) as the containers.
 
 ### Prerequisites
 
@@ -55,7 +93,9 @@ On Linux/Docker, install `poppler-utils` and keep the defaults (`pdftotext` / `p
 |---|---|---|
 | Laravel API | `8000` | `php artisan serve --port=8000` |
 | PostgreSQL (container) | host `5433` → container `5432` | `DB_PORT` / `DB_HOST_PORT` in `.env` |
-| Frontend SPA (other repo) | `3000` | `FRONTEND_URL` in `.env` |
+| Frontend SPA (other repo) | `5173` | `FRONTEND_URL` in `.env` |
+
+The SPA uses Vite's standard port `5173`: Windows' dynamic port reservations (Hyper-V/WinNAT) included `3000` on this machine.
 
 Host port `5432` is deliberately avoided because it may already be used by a native PostgreSQL installation. Windows can also reserve port ranges (Hyper-V/WinNAT), so check a port before using it:
 
@@ -74,7 +114,7 @@ Always use `localhost` (not `127.0.0.1`) for the API and SPA URLs in the browser
 copy .env.example .env          # then set DB_PASSWORD to a strong random value
 composer install
 php artisan key:generate
-docker compose -f docker-compose.db.yml up -d
+docker compose up -d db
 php artisan migrate
 php artisan boost:install       # optional: regenerates Laravel Boost AI skills (.claude/skills, not committed)
 ```
@@ -84,7 +124,7 @@ php artisan boost:install       # optional: regenerates Laravel Boost AI skills 
 Run each in its own terminal (from this directory):
 
 ```powershell
-docker compose -f docker-compose.db.yml up -d              # database (if not already running)
+docker compose up -d db                                    # database (if not already running)
 php artisan serve --port=8000                               # API
 php artisan queue:work --queue=answers --tries=3            # answer-generation worker
 php artisan queue:work --queue=documents --tries=3          # document-processing worker
@@ -115,26 +155,26 @@ Shows which chunks a question retrieves from a ready document, with page and sim
 
 ## Local database
 
-The database container is defined in [`docker-compose.db.yml`](docker-compose.db.yml). It reads its credentials from `.env` — the same values Laravel uses.
+The database container is the `db` service in [`compose.yaml`](compose.yaml). It reads its credentials from `.env` — the same values Laravel uses.
 
 | Task | Command |
 |---|---|
-| Start | `docker compose -f docker-compose.db.yml up -d` |
-| Status / health | `docker compose -f docker-compose.db.yml ps` |
-| Logs | `docker compose -f docker-compose.db.yml logs -f db` |
-| SQL shell | `docker compose -f docker-compose.db.yml exec db psql -U askmydocs -d askmydocs` |
-| Check pgvector | `docker compose -f docker-compose.db.yml exec db psql -U askmydocs -d askmydocs -c "select extversion from pg_extension where extname = 'vector';"` |
-| Stop (keeps data) | `docker compose -f docker-compose.db.yml stop` |
-| Remove container (keeps data) | `docker compose -f docker-compose.db.yml down` |
-| Back up | `docker compose -f docker-compose.db.yml exec -T db pg_dump -U askmydocs -Fc askmydocs > askmydocs.dump` |
+| Start | `docker compose up -d db` |
+| Status / health | `docker compose ps` |
+| Logs | `docker compose logs -f db` |
+| SQL shell | `docker compose exec db psql -U askmydocs -d askmydocs` |
+| Check pgvector | `docker compose exec db psql -U askmydocs -d askmydocs -c "select extversion from pg_extension where extname = 'vector';"` |
+| Stop (keeps data) | `docker compose stop db` |
+| Remove container (keeps data) | `docker compose down` |
+| Back up | `docker compose exec -T db pg_dump -U askmydocs -Fc askmydocs > askmydocs.dump` |
 
 **Data** lives in the named volume `askmydocs_pgdata` and survives `stop`, `down` and restarts.
 
-⚠️ `docker compose -f docker-compose.db.yml down -v` **deletes the volume and all data.**
+⚠️ `docker compose down -v` **deletes the volume and all data.**
 
 **First start only:** scripts in `docker/postgres/init/` run only when the volume is empty. They create the `askmydocs_test` database. Changing `DB_USERNAME`/`DB_PASSWORD` in `.env` after the first start does **not** change the existing database user; either alter it with `psql` or recreate the volume.
 
-**Upgrading pgvector:** change the image tag in `docker-compose.db.yml`, run `up -d`, then `ALTER EXTENSION vector UPDATE;` in each database. A major PostgreSQL upgrade (e.g. 18 → 19) requires a dump and restore.
+**Upgrading pgvector:** change the image tag in `compose.yaml`, run `up -d`, then `ALTER EXTENSION vector UPDATE;` in each database. A major PostgreSQL upgrade (e.g. 18 → 19) requires a dump and restore.
 
 The container restarts automatically with Docker Desktop (`restart: unless-stopped`) unless you stopped it explicitly.
 
