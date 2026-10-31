@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Models\User;
 use App\Services\Chunking\TextChunker;
+use App\Services\Embeddings\EmbeddingClient;
+use App\Services\Embeddings\OpenAiEmbeddingClient;
 use App\Services\Pdf\PdfTextExtractor;
 use App\Services\Pdf\PopplerPdfTextExtractor;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -31,6 +33,14 @@ class AppServiceProvider extends ServiceProvider
             targetChars: config('documents.chunking.target_chars'),
             maxChars: config('documents.chunking.max_chars'),
             overlapChars: config('documents.chunking.overlap_chars'),
+        ));
+
+        $this->app->bind(EmbeddingClient::class, fn (): EmbeddingClient => new OpenAiEmbeddingClient(
+            apiKey: config('services.openai.api_key'),
+            baseUrl: config('services.openai.base_url'),
+            model: config('services.openai.embedding_model'),
+            dimensions: config('services.openai.embedding_dimensions'),
+            timeoutSeconds: config('services.openai.timeout'),
         ));
     }
 

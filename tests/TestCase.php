@@ -3,6 +3,7 @@
 namespace Tests;
 
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 abstract class TestCase extends BaseTestCase
@@ -25,6 +26,17 @@ abstract class TestCase extends BaseTestCase
         }
 
         return $app;
+    }
+
+    /**
+     * No test may reach a real external service (e.g. OpenAI, which costs money):
+     * every outgoing HTTP request must be faked with Http::fake(), or the test fails.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Http::preventStrayRequests();
     }
 
     /**
