@@ -4,7 +4,7 @@ namespace App\Services\Retrieval;
 
 use App\Models\DocumentChunk;
 use App\Services\Embeddings\EmbeddingClient;
-use App\Services\Embeddings\EmbeddingException;
+use App\Services\OpenAi\OpenAiException;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -30,7 +30,7 @@ class ChunkRetriever
      * @param  list<string>  $documentIds  documents the caller is allowed to search
      * @return list<RetrievedChunk> most similar first
      *
-     * @throws EmbeddingException when the question cannot be embedded
+     * @throws OpenAiException when the question cannot be embedded
      */
     public function search(array $documentIds, string $question, int $limit = 5): array
     {

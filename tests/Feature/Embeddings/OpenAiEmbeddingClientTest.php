@@ -1,8 +1,9 @@
 <?php
 
 use App\Services\Embeddings\EmbeddingClient;
-use App\Services\Embeddings\EmbeddingException;
 use App\Services\Embeddings\OpenAiEmbeddingClient;
+use App\Services\OpenAi\OpenAiException;
+use App\Services\OpenAi\OpenAiHttp;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\StrayRequestException;
 use Illuminate\Support\Facades\Http;
@@ -13,8 +14,7 @@ const TEST_API_KEY = 'sk-test-not-a-real-key-123';
 function embeddingClient(?string $apiKey = TEST_API_KEY, int $batchSize = 100): OpenAiEmbeddingClient
 {
     return new OpenAiEmbeddingClient(
-        apiKey: $apiKey,
-        baseUrl: 'https://api.openai.test/v1',
+        http: new OpenAiHttp($apiKey, 'https://api.openai.test/v1'),
         model: 'text-embedding-3-small',
         dimensions: 3,
         timeoutSeconds: 30,
@@ -39,15 +39,15 @@ function embeddingsResponse(array $inputs, bool $shuffled = false, int $dimensio
     ];
 }
 
-function embeddingError(EmbeddingClient $client): EmbeddingException
+function embeddingError(EmbeddingClient $client): OpenAiException
 {
     try {
         $client->embed(['Some chunk text.']);
-    } catch (EmbeddingException $exception) {
+    } catch (OpenAiException $exception) {
         return $exception;
     }
 
-    throw new RuntimeException('Expected an EmbeddingException.');
+    throw new RuntimeException('Expected an OpenAiException.');
 }
 
 it('sends the documented request and returns one vector per text', function () {
@@ -109,7 +109,7 @@ it('fails without calling OpenAI when no API key is configured', function (?stri
     Http::fake();
 
     expect(embeddingError(embeddingClient(apiKey: $key)))
-        ->reason->toBe(EmbeddingException::NOT_CONFIGURED)
+        ->reason->toBe(OpenAiException::NOT_CONFIGURED)
         ->isPermanent()->toBeTrue();
     Http::assertNothingSent();
 })->with([null, '']);
@@ -121,14 +121,14 @@ it('classifies OpenAI errors as permanent or retryable', function (int $status, 
         ->reason->toBe($reason)
         ->isPermanent()->toBe($permanent);
 })->with([
-    'invalid key' => [401, ['error' => ['type' => 'invalid_request_error', 'code' => 'invalid_api_key']], EmbeddingException::AUTHENTICATION_FAILED, true],
-    'no access' => [403, ['error' => ['type' => 'invalid_request_error']], EmbeddingException::AUTHENTICATION_FAILED, true],
-    'out of credit' => [429, ['error' => ['type' => 'insufficient_quota', 'code' => 'insufficient_quota']], EmbeddingException::QUOTA_EXCEEDED, true],
-    'rate limited' => [429, ['error' => ['type' => 'requests', 'code' => 'rate_limit_exceeded']], EmbeddingException::RATE_LIMITED, false],
-    'input too long' => [400, ['error' => ['type' => 'invalid_request_error']], EmbeddingException::REQUEST_REJECTED, true],
-    'unknown model' => [404, ['error' => ['type' => 'invalid_request_error', 'code' => 'model_not_found']], EmbeddingException::REQUEST_REJECTED, true],
-    'server error' => [500, ['error' => ['type' => 'server_error']], EmbeddingException::PROVIDER_ERROR, false],
-    'overloaded' => [503, [], EmbeddingException::PROVIDER_ERROR, false],
+    'invalid key' => [401, ['error' => ['type' => 'invalid_request_error', 'code' => 'invalid_api_key']], OpenAiException::AUTHENTICATION_FAILED, true],
+    'no access' => [403, ['error' => ['type' => 'invalid_request_error']], OpenAiException::AUTHENTICATION_FAILED, true],
+    'out of credit' => [429, ['error' => ['type' => 'insufficient_quota', 'code' => 'insufficient_quota']], OpenAiException::QUOTA_EXCEEDED, true],
+    'rate limited' => [429, ['error' => ['type' => 'requests', 'code' => 'rate_limit_exceeded']], OpenAiException::RATE_LIMITED, false],
+    'input too long' => [400, ['error' => ['type' => 'invalid_request_error']], OpenAiException::REQUEST_REJECTED, true],
+    'unknown model' => [404, ['error' => ['type' => 'invalid_request_error', 'code' => 'model_not_found']], OpenAiException::REQUEST_REJECTED, true],
+    'server error' => [500, ['error' => ['type' => 'server_error']], OpenAiException::PROVIDER_ERROR, false],
+    'overloaded' => [503, [], OpenAiException::PROVIDER_ERROR, false],
 ]);
 
 it('passes on how long OpenAI asks us to wait', function () {
@@ -141,14 +141,14 @@ it('treats network failures as retryable', function () {
     Http::fake(['*' => Http::failedConnection('Connection timed out')]);
 
     expect(embeddingError(embeddingClient()))
-        ->reason->toBe(EmbeddingException::CONNECTION_FAILED)
+        ->reason->toBe(OpenAiException::CONNECTION_FAILED)
         ->isPermanent()->toBeFalse();
 });
 
 it('rejects responses that do not match the request', function (array $body) {
     Http::fake(['*' => Http::response($body)]);
 
-    expect(embeddingError(embeddingClient())->reason)->toBe(EmbeddingException::INVALID_RESPONSE);
+    expect(embeddingError(embeddingClient())->reason)->toBe(OpenAiException::INVALID_RESPONSE);
 })->with([
     'wrong vector size' => [embeddingsResponse(['x'], dimensions: 5)],
     'missing embeddings' => [['data' => [], 'usage' => ['total_tokens' => 1]]],

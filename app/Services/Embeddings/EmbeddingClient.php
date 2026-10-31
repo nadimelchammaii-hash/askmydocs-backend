@@ -2,6 +2,8 @@
 
 namespace App\Services\Embeddings;
 
+use App\Services\OpenAi\OpenAiException;
+
 /**
  * Turns texts into embedding vectors.
  *
@@ -14,7 +16,7 @@ interface EmbeddingClient
      *
      * @param  list<string>  $texts  non-empty strings
      *
-     * @throws EmbeddingException when the provider fails or answers unexpectedly
+     * @throws OpenAiException when the provider fails or answers unexpectedly
      */
     public function embed(array $texts): EmbeddingResult;
 

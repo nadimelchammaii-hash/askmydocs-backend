@@ -2,7 +2,7 @@
 
 use App\Models\Document;
 use App\Models\DocumentChunk;
-use App\Services\Embeddings\EmbeddingException;
+use App\Services\OpenAi\OpenAiException;
 use App\Services\Retrieval\ChunkRetriever;
 use App\Services\Retrieval\RetrievedChunk;
 use Illuminate\Support\Facades\DB;
@@ -128,10 +128,10 @@ it('rejects an empty question or an unreasonable limit', function (string $quest
 ]);
 
 it('lets the caller handle OpenAI failures', function () {
-    $this->embeddings->failWith(EmbeddingException::rateLimited('HTTP 429', 5));
+    $this->embeddings->failWith(OpenAiException::rateLimited('HTTP 429', 5));
 
     retriever()->search(['01m661xjyep8kr1dxj5pascncn'], QUESTION);
-})->throws(EmbeddingException::class);
+})->throws(OpenAiException::class);
 
 describe('documents:search command', function () {
     it('prints the best chunks with page and similarity', function () {
@@ -153,7 +153,7 @@ describe('documents:search command', function () {
     });
 
     it('explains embedding failures', function () {
-        $this->embeddings->failWith(EmbeddingException::notConfigured());
+        $this->embeddings->failWith(OpenAiException::notConfigured());
         $document = Document::factory()->ready()->create();
 
         $this->artisan('documents:search', ['document' => $document->id, 'question' => QUESTION])

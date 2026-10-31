@@ -1,20 +1,21 @@
 <?php
 
-namespace App\Services\Embeddings;
+namespace App\Services\OpenAi;
 
 use RuntimeException;
 
 /**
- * Why embedding failed. `reason` is for logs and tests; the message is safe to
- * log but is NOT shown to users (they see a generic message): these are
- * configuration or provider problems, not problems with their file.
+ * Why a call to OpenAI failed. `reason` is for logs, tests and deciding what to
+ * show; the message is safe to log but is NOT shown to users as is.
  *
- * Neither the message nor `detail` ever contains the API key or input text.
+ * Neither the message nor `detail` ever contains the API key, the prompt or
+ * document text.
  *
- * Permanent: retrying cannot help (bad key, no credit, rejected request).
- * Transient: may succeed later (rate limit, provider outage, network).
+ * Permanent: retrying the same request cannot help (bad key, no credit,
+ * rejected or unusable request/response). Transient: may succeed later
+ * (rate limit, provider outage, network).
  */
-final class EmbeddingException extends RuntimeException
+final class OpenAiException extends RuntimeException
 {
     public const NOT_CONFIGURED = 'not_configured';
 
@@ -25,6 +26,12 @@ final class EmbeddingException extends RuntimeException
     public const REQUEST_REJECTED = 'request_rejected';
 
     public const INVALID_RESPONSE = 'invalid_response';
+
+    /** The model stopped before finishing (max_output_tokens reached). */
+    public const OUTPUT_TRUNCATED = 'output_truncated';
+
+    /** The model declined to answer, or OpenAI's content filter stopped it. */
+    public const REFUSED = 'refused';
 
     public const RATE_LIMITED = 'rate_limited';
 
@@ -61,12 +68,22 @@ final class EmbeddingException extends RuntimeException
 
     public static function requestRejected(string $detail): self
     {
-        return new self(self::REQUEST_REJECTED, 'OpenAI rejected the embedding request.', true, $detail);
+        return new self(self::REQUEST_REJECTED, 'OpenAI rejected the request.', true, $detail);
     }
 
     public static function invalidResponse(string $detail): self
     {
-        return new self(self::INVALID_RESPONSE, 'OpenAI returned an unexpected embedding response.', true, $detail);
+        return new self(self::INVALID_RESPONSE, 'OpenAI returned an unexpected response.', true, $detail);
+    }
+
+    public static function outputTruncated(string $detail): self
+    {
+        return new self(self::OUTPUT_TRUNCATED, 'The model reached its output limit before finishing.', true, $detail);
+    }
+
+    public static function refused(string $detail): self
+    {
+        return new self(self::REFUSED, 'The model declined to respond.', true, $detail);
     }
 
     public static function rateLimited(string $detail, ?int $retryAfter): self

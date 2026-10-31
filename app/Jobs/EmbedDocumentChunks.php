@@ -9,7 +9,7 @@ use App\Models\DocumentPage;
 use App\Services\Chunking\Chunk;
 use App\Services\Chunking\TextChunker;
 use App\Services\Embeddings\EmbeddingClient;
-use App\Services\Embeddings\EmbeddingException;
+use App\Services\OpenAi\OpenAiException;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -88,7 +88,7 @@ class EmbedDocumentChunks implements ShouldBeUnique, ShouldQueue
                 fn (Chunk $chunk): string => $this->embeddingInput($document, $chunk),
                 $chunks,
             ));
-        } catch (EmbeddingException $exception) {
+        } catch (OpenAiException $exception) {
             Log::warning('Document embedding failed', [
                 'document_id' => $document->id,
                 'reason' => $exception->reason,

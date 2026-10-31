@@ -3,8 +3,8 @@
 namespace Tests\Support;
 
 use App\Services\Embeddings\EmbeddingClient;
-use App\Services\Embeddings\EmbeddingException;
 use App\Services\Embeddings\EmbeddingResult;
+use App\Services\OpenAi\OpenAiException;
 
 /**
  * Stands in for OpenAI. Returns a deterministic unit vector per text (the same
@@ -19,7 +19,7 @@ final class FakeEmbeddingClient implements EmbeddingClient
     /** @var array<string, list<float>> */
     private array $vectors = [];
 
-    private ?EmbeddingException $failure = null;
+    private ?OpenAiException $failure = null;
 
     public function __construct(private readonly int $dimensions = 1536) {}
 
@@ -39,7 +39,7 @@ final class FakeEmbeddingClient implements EmbeddingClient
         return $this;
     }
 
-    public function failWith(EmbeddingException $exception): self
+    public function failWith(OpenAiException $exception): self
     {
         $this->failure = $exception;
 

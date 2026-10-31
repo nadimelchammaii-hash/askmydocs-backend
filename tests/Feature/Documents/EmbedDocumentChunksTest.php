@@ -8,8 +8,8 @@ use App\Models\DocumentPage;
 use App\Models\User;
 use App\Services\Chunking\TextChunker;
 use App\Services\Embeddings\EmbeddingClient;
-use App\Services\Embeddings\EmbeddingException;
 use App\Services\Embeddings\EmbeddingResult;
+use App\Services\OpenAi\OpenAiException;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Tests\Support\FakeEmbeddingClient;
@@ -118,22 +118,22 @@ it('does nothing unless the document is waiting for embedding', function (Docume
         ->and($document->refresh()->status)->toBe($status);
 })->with([DocumentStatus::Queued, DocumentStatus::Extracting, DocumentStatus::Ready, DocumentStatus::Failed]);
 
-it('fails at once when the configuration is the problem', function (EmbeddingException $exception) {
+it('fails at once when the configuration is the problem', function (OpenAiException $exception) {
     $this->embeddings->failWith($exception);
 
     $job = runEmbedJob(documentAwaitingEmbedding());
 
-    $job->assertFailedWith(EmbeddingException::class);
+    $job->assertFailedWith(OpenAiException::class);
     $job->assertNotReleased();
     expect(DocumentChunk::count())->toBe(0);
 })->with([
-    'no API key' => fn () => EmbeddingException::notConfigured(),
-    'invalid key' => fn () => EmbeddingException::authenticationFailed('HTTP 401'),
-    'no credit' => fn () => EmbeddingException::quotaExceeded('HTTP 429 code=insufficient_quota'),
+    'no API key' => fn () => OpenAiException::notConfigured(),
+    'invalid key' => fn () => OpenAiException::authenticationFailed('HTTP 401'),
+    'no credit' => fn () => OpenAiException::quotaExceeded('HTTP 429 code=insufficient_quota'),
 ]);
 
 it('shows users a generic message when embedding fails', function () {
-    $this->embeddings->failWith(EmbeddingException::authenticationFailed('HTTP 401'));
+    $this->embeddings->failWith(OpenAiException::authenticationFailed('HTTP 401'));
     $document = documentAwaitingEmbedding();
 
     EmbedDocumentChunks::dispatch($document); // sync queue: fail() calls failed()
@@ -147,19 +147,19 @@ it('shows users a generic message when embedding fails', function () {
 });
 
 it('rethrows temporary failures so the queue retries after the backoff', function () {
-    $this->embeddings->failWith(EmbeddingException::providerError('HTTP 503'));
+    $this->embeddings->failWith(OpenAiException::providerError('HTTP 503'));
     $document = documentAwaitingEmbedding();
     $job = (new EmbedDocumentChunks($document))->withFakeQueueInteractions();
 
     expect(fn () => $job->handle(app(TextChunker::class), app(EmbeddingClient::class)))
-        ->toThrow(EmbeddingException::class);
+        ->toThrow(OpenAiException::class);
 
     $job->assertNotFailed();
     expect($document->refresh()->status)->toBe(DocumentStatus::Embedding);
 });
 
 it('waits as long as OpenAI asks when rate limited', function () {
-    $this->embeddings->failWith(EmbeddingException::rateLimited('HTTP 429', retryAfter: 20));
+    $this->embeddings->failWith(OpenAiException::rateLimited('HTTP 429', retryAfter: 20));
 
     $job = runEmbedJob(documentAwaitingEmbedding());
 

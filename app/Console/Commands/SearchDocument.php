@@ -4,7 +4,7 @@ namespace App\Console\Commands;
 
 use App\Enums\DocumentStatus;
 use App\Models\Document;
-use App\Services\Embeddings\EmbeddingException;
+use App\Services\OpenAi\OpenAiException;
 use App\Services\Retrieval\ChunkRetriever;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -40,7 +40,7 @@ class SearchDocument extends Command
 
         try {
             $chunks = $retriever->search([$document->id], (string) $this->argument('question'), (int) $this->option('limit'));
-        } catch (EmbeddingException $exception) {
+        } catch (OpenAiException $exception) {
             $this->error("Could not embed the question: {$exception->getMessage()} ({$exception->reason})");
 
             return self::FAILURE;

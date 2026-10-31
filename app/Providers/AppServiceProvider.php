@@ -6,6 +6,9 @@ use App\Models\User;
 use App\Services\Chunking\TextChunker;
 use App\Services\Embeddings\EmbeddingClient;
 use App\Services\Embeddings\OpenAiEmbeddingClient;
+use App\Services\OpenAi\OpenAiHttp;
+use App\Services\OpenAi\OpenAiResponsesClient;
+use App\Services\OpenAi\StructuredOutputClient;
 use App\Services\Pdf\PdfTextExtractor;
 use App\Services\Pdf\PopplerPdfTextExtractor;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -35,12 +38,24 @@ class AppServiceProvider extends ServiceProvider
             overlapChars: config('documents.chunking.overlap_chars'),
         ));
 
-        $this->app->bind(EmbeddingClient::class, fn (): EmbeddingClient => new OpenAiEmbeddingClient(
+        $this->app->bind(OpenAiHttp::class, fn (): OpenAiHttp => new OpenAiHttp(
             apiKey: config('services.openai.api_key'),
             baseUrl: config('services.openai.base_url'),
+        ));
+
+        $this->app->bind(EmbeddingClient::class, fn (): EmbeddingClient => new OpenAiEmbeddingClient(
+            http: $this->app->make(OpenAiHttp::class),
             model: config('services.openai.embedding_model'),
             dimensions: config('services.openai.embedding_dimensions'),
             timeoutSeconds: config('services.openai.timeout'),
+        ));
+
+        $this->app->bind(StructuredOutputClient::class, fn (): StructuredOutputClient => new OpenAiResponsesClient(
+            http: $this->app->make(OpenAiHttp::class),
+            model: config('services.openai.answer_model'),
+            reasoningEffort: config('services.openai.answer_reasoning_effort'),
+            maxOutputTokens: config('services.openai.answer_max_output_tokens'),
+            timeoutSeconds: config('services.openai.answer_timeout'),
         ));
     }
 
