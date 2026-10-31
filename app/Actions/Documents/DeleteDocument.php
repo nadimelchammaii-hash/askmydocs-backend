@@ -16,8 +16,8 @@ use Throwable;
  * file is left, which the orphan cleanup command removes later. The reverse
  * order could leave a document row pointing at a missing file.
  *
- * Pages (and, in later phases, chunks, conversations, messages and citations)
- * are removed by ON DELETE CASCADE foreign keys inside the same transaction.
+ * Pages, chunks, conversations, messages and citations are removed by
+ * ON DELETE CASCADE foreign keys inside the same transaction.
  */
 class DeleteDocument
 {

@@ -58,6 +58,14 @@ class Document extends Model
         return $this->hasMany(DocumentChunk::class)->orderBy('chunk_index');
     }
 
+    /**
+     * @return HasMany<Conversation, $this>
+     */
+    public function conversations(): HasMany
+    {
+        return $this->hasMany(Conversation::class);
+    }
+
     public function isOwnedBy(User $user): bool
     {
         return $this->user_id === $user->id;

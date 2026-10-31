@@ -4,7 +4,7 @@ Laravel REST API for AskMyDocs: upload PDF documents and ask questions about the
 
 The UI is a separate application in its own repository: **askmydocs-frontend** (Vue 3 + Vuetify). The API contract shared by both is documented in [`docs/api.md`](docs/api.md).
 
-> Status: Phase 2 (document upload and text extraction) in progress.
+> Status: Phase 3 complete (upload, extraction, chunking, embeddings, retrieval). Next: Phase 4, answers with citations.
 
 ## Stack
 
@@ -27,6 +27,8 @@ Laravel runs **natively**. Only PostgreSQL runs in Docker, because pgvector is n
 - Docker Desktop (running)
 - Poppler (`pdftotext`, `pdfinfo`) for PDF text extraction — see below
 - `php.ini`: `upload_max_filesize = 21M` and `post_max_size = 25M` (PHP's defaults of 2M/8M reject 20 MB PDFs before Laravel sees them)
+- `php.ini`: a trusted CA certificate bundle for HTTPS calls to OpenAI. PHP on Windows ships without one, which fails with `cURL error 60: SSL certificate problem`. Download [cacert.pem](https://curl.se/ca/cacert.pem) (verify it against [cacert.pem.sha256](https://curl.se/ca/cacert.pem.sha256)), e.g. to `C:\php-8.4\extras\ssl\cacert.pem`, and set both `curl.cainfo` and `openssl.cafile` to that path. Never disable certificate verification instead.
+- An OpenAI API key (`OPENAI_API_KEY`) for embeddings; without it, uploads end as `failed` with `embedding_failed`
 
 ### Poppler (PDF text extraction)
 
@@ -145,7 +147,49 @@ vendor/bin/pint --test  # formatting check (vendor/bin/pint to fix)
 
 Feature tests run against the `askmydocs_test` database (see `phpunit.xml`), never the development database: `tests/TestCase.php` aborts if the configured database name does not end in `_test`. The database container must be running.
 
+## How documents become searchable
+
+```
+upload ─▶ queued ─▶ extracting ─▶ embedding ─▶ ready
+           (validated:     (Poppler,      (chunks +
+            PDF, 20 MB,     page by page)  OpenAI embeddings
+            300 pages)                     in pgvector)
+                    └──────────┴──────────▶ failed (error_code says why; retryable)
+```
+
+1. **Upload** validates the file by content, stores it under a generated name and queues extraction.
+2. **ExtractDocumentText** runs `pdftotext` and stores the text of every page (`document_pages`).
+3. **EmbedDocumentChunks** splits pages into chunks, embeds them with OpenAI and stores them with their vectors (`document_chunks`).
+4. **ChunkRetriever** embeds a question and returns the most similar chunks of the given documents, each with its page number for citations.
+
+## Design decisions
+
+| Decision | Choice | Why / trade-off |
+|---|---|---|
+| Embedding model | `text-embedding-3-small`, 1,536 dimensions | $0.02 per 1M tokens (a 300-page PDF costs about $0.005). Fits pgvector's HNSW index limit (2,000 dimensions) without truncation. `text-embedding-3-large` scores slightly higher on benchmarks but costs 6.5x more and needs 3,072 dimensions. |
+| Chunking | ~1,500 characters (max 2,000), 200 overlap, **never across pages** | Every chunk cites exactly one page. Cuts prefer paragraph > sentence > line > word boundaries; chunks are exact excerpts of the page. Trade-off: a sentence spanning two pages is split. |
+| Embedded text | `Document: <title>` + `Page <n>` header + chunk | The header helps questions that mention the document; only the chunk text is stored and cited. |
+| OpenAI client | Own small client on Laravel's HTTP client, behind an interface | One endpoint is needed. Full control over timeouts, error classification and logging; trivially faked in tests. |
+| Pipeline | Two queued jobs (extract, embed) | Different failure modes: a PDF problem is permanent, an OpenAI outage is temporary. An outage does not redo extraction; rate limits honour `Retry-After`. |
+| Vector search | HNSW index, cosine distance, **iterative scan** enabled per query | Without iterative scan, HNSW filters by document *after* finding the nearest chunks overall, so searching one document among many can return nothing. A test reproduces this. |
+| Failure messages | Specific for file problems, generic for provider/config problems | Users can act on "this PDF is password-protected", not on "invalid API key". Details go to the log, never document text. |
+
+### Live verification (October 2026)
+
+A 3-page test document (company history, refund policy, opening hours) was embedded with the real API: **3 chunks, 166 tokens (≈ $0.000003)**. Questions sharing no keywords with the text found the right page first:
+
+| Question | Top result | Similarity (next best) |
+|---|---|---|
+| "Can I get my money back if I don't like something?" | Page 2 (refund policy) | 0.431 (0.142) |
+| "When can I visit you on the weekend?" | Page 3 (opening hours) | 0.291 (0.132) |
+| "Who started the business?" | Page 1 (company history) | 0.333 (0.184) |
+
+Note the absolute scores: with these models, relevant matches often score 0.3–0.5, not close to 1. Any relevance threshold must be calibrated on real data.
+
 ## Security notes
 
-- `.env` is not committed. It holds the database password and, later, the OpenAI API key.
+- `.env` is not committed. It holds the database password and the OpenAI API key. Use an OpenAI **project key with a monthly spending limit**.
+- Document text is sent to OpenAI to create embeddings (and, from Phase 4, answers).
+- Tests never call OpenAI: every outgoing HTTP request in tests must be faked, or the test fails.
+- Logs contain document IDs, error reasons and token counts, never document text or the API key.
 - The database port is bound to `127.0.0.1` only.
