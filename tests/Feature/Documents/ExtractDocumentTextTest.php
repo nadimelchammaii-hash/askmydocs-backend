@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\DocumentStatus;
+use App\Jobs\EmbedDocumentChunks;
 use App\Jobs\ExtractDocumentText;
 use App\Models\Document;
 use App\Models\DocumentPage;
@@ -8,12 +9,15 @@ use App\Models\User;
 use App\Services\Pdf\PdfExtractionException;
 use App\Services\Pdf\PdfTextExtractor;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Tests\Support\FakeEmbeddingClient;
 use Tests\Support\FakePdfTextExtractor;
 use Tests\Support\PdfFixture;
 
 beforeEach(function () {
     Storage::fake(config('documents.disk'));
+    FakeEmbeddingClient::bind(); // the embedding step that follows extraction never calls OpenAI
 });
 
 afterEach(fn () => PdfFixture::cleanUp());
@@ -49,7 +53,8 @@ it('runs on the documents queue with retries, backoff and a timeout', function (
         ->and(config('queue.connections.database.retry_after'))->toBeGreaterThan($job->timeout);
 });
 
-it('stores every page and marks the document ready', function () {
+it('stores every page and hands the document over to embedding', function () {
+    Queue::fake([EmbedDocumentChunks::class]); // only the next step is held back
     FakePdfTextExtractor::bind(['First page text.', '', 'Último página, ünïcödé.']);
     $document = storedDocument();
 
@@ -57,9 +62,10 @@ it('stores every page and marks the document ready', function () {
 
     $document->refresh();
 
-    expect($document->status)->toBe(DocumentStatus::Ready)
+    Queue::assertPushedOn('documents', EmbedDocumentChunks::class, fn (EmbedDocumentChunks $job) => $job->document->is($document));
+    expect($document->status)->toBe(DocumentStatus::Embedding)
         ->and($document->page_count)->toBe(3) // pdftotext is the source of truth
-        ->and($document->processed_at)->not->toBeNull()
+        ->and($document->processed_at)->toBeNull() // set when embedding finishes
         ->and($document->processing_started_at)->not->toBeNull()
         ->and(storedPages($document))->toBe([
             [1, 'First page text.', 16],
@@ -219,12 +225,18 @@ describe('on the real database queue', function () {
             ->assertAccepted()
             ->json('data.id');
 
-        workDocumentsQueue();
+        workDocumentsQueue(); // extraction
+        $this->fromSpa()->actingAs($user)->getJson("/api/v1/documents/{$id}")
+            ->assertJsonPath('data.status', 'embedding')
+            ->assertJsonPath('data.is_finished', false);
 
+        workDocumentsQueue(); // embedding (fake OpenAI)
         $this->fromSpa()->actingAs($user)->getJson("/api/v1/documents/{$id}")
             ->assertJsonPath('data.status', 'ready')
             ->assertJsonPath('data.is_finished', true)
             ->assertJsonPath('data.page_count', 2);
+
+        expect(Document::findOrFail($id)->chunks->pluck('page_number')->all())->toBe([1, 2]);
 
         $this->fromSpa()->actingAs($user)->getJson("/api/v1/documents/{$id}/pages/2")
             ->assertOk()

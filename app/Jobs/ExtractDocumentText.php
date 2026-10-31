@@ -27,10 +27,12 @@ use Throwable;
  * Safe to run more than once: pages are replaced as a whole, in one
  * transaction, and a document that is already ready is left untouched.
  *
+ * On success the document moves to `embedding` and EmbedDocumentChunks is queued.
+ *
  * Timing chain (each must be shorter than the next):
  *   Poppler process timeout (90 s, config/documents.php)
  *   < this job's $timeout (120 s)
- *   < the queue's retry_after (180 s, config/queue.php).
+ *   < the queue's retry_after (300 s, config/queue.php).
  * Otherwise the queue could hand a still-running job to a second worker.
  */
 class ExtractDocumentText implements ShouldBeUnique, ShouldQueue
@@ -107,7 +109,10 @@ class ExtractDocumentText implements ShouldBeUnique, ShouldQueue
             throw $exception; // the queue retries after the backoff
         }
 
-        $this->storePages($pages);
+        if ($this->storePages($pages)) {
+            // Next step: chunking and embeddings (after the pages are committed).
+            EmbedDocumentChunks::dispatch($this->document);
+        }
     }
 
     /**
@@ -122,7 +127,8 @@ class ExtractDocumentText implements ShouldBeUnique, ShouldQueue
     }
 
     /**
-     * Replaces the document's pages and marks it ready, atomically.
+     * Replaces the document's pages and moves it to the embedding step, atomically.
+     * Returns false if the document was deleted meanwhile.
      *
      * The row is locked first, so a concurrent DELETE either finishes before
      * (the row is gone and nothing is written) or waits until this commits
@@ -130,13 +136,13 @@ class ExtractDocumentText implements ShouldBeUnique, ShouldQueue
      *
      * @param  list<string>  $pages
      */
-    private function storePages(array $pages): void
+    private function storePages(array $pages): bool
     {
-        DB::transaction(function () use ($pages): void {
+        return DB::transaction(function () use ($pages): bool {
             $document = Document::whereKey($this->document->id)->lockForUpdate()->first();
 
             if ($document === null) {
-                return; // deleted while extracting
+                return false; // deleted while extracting
             }
 
             DocumentPage::where('document_id', $document->id)->delete();
@@ -153,12 +159,13 @@ class ExtractDocumentText implements ShouldBeUnique, ShouldQueue
             }
 
             $document->update([
-                'status' => DocumentStatus::Ready,
+                'status' => DocumentStatus::Embedding,
                 'page_count' => count($pages),
-                'processed_at' => now(),
                 'error_code' => null,
                 'error_message' => null,
             ]);
+
+            return true;
         });
     }
 

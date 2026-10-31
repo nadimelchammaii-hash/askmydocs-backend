@@ -167,6 +167,7 @@ New statuses may be added between `queued` and `ready`; clients should rely on `
 | `no_text_layer` | No selectable text (e.g. a scan); OCR is not supported |
 | `extraction_timeout` / `extraction_failed` | Processing failed after 3 attempts; retrying later may help |
 | `file_missing` | The stored file is gone; upload again |
+| `embedding_failed` | Preparing the text for questions failed (AI provider unavailable or misconfigured); retry later |
 
 #### `GET /api/v1/documents`
 

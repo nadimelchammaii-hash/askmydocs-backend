@@ -92,7 +92,7 @@ php artisan queue:work --queue=documents --tries=3          # document-processin
 
 Every job must declare its queue (`answers` or `documents`). A job pushed to the `default` queue is never picked up by these workers.
 
-**Windows note:** PHP on Windows has no `pcntl` extension, so the worker cannot enforce a job's own `timeout`. PDF extraction is still bounded by the Poppler process timeout (`PDF_PROCESS_TIMEOUT`, 90 s). On Linux/Docker the job timeout (120 s) applies as well. Keep `DB_QUEUE_RETRY_AFTER` (180 s) above the job timeout.
+**Windows note:** PHP on Windows has no `pcntl` extension, so the worker cannot enforce a job's own `timeout`. Extraction is still bounded by the Poppler process timeout (`PDF_PROCESS_TIMEOUT`, 90 s) and embedding by the OpenAI request timeout (`OPENAI_TIMEOUT`, 30 s per request). On Linux/Docker the job timeouts (extraction 120 s, embedding 240 s) apply as well. Keep `DB_QUEUE_RETRY_AFTER` (300 s) above the longest job timeout.
 
 ### Scheduled tasks
 

@@ -40,9 +40,9 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            // Must exceed the longest job timeout (ExtractDocumentText: 120 s), or a job still
+            // Must exceed the longest job timeout (EmbedDocumentChunks: 240 s), or a job still
             // running would be handed to a second worker.
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 180),
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 300),
             'after_commit' => false,
         ],
 
