@@ -146,10 +146,10 @@ describe('polling a message', function () {
         $this->conversation = Conversation::factory()->for($this->document)->create(['user_id' => $this->owner->id]);
     });
 
-    it('returns a finished answer with numbered citations', function () {
-        $answer = Message::factory()->for($this->conversation)->answer()->create(['content' => 'Within 30 days [1]. Receipt needed [2].']);
-        MessageCitation::factory()->for($answer)->create(['position' => 1, 'page_number' => 2, 'quote' => 'A receipt is required']);
-        MessageCitation::factory()->for($answer)->create(['position' => 0, 'page_number' => 2, 'quote' => 'within 30 days of purchase']);
+    it('returns a finished answer with numbered citations, sharing numbers per source', function () {
+        $answer = Message::factory()->for($this->conversation)->answer()->create(['content' => 'Within 30 days, with a receipt [1].']);
+        MessageCitation::factory()->for($answer)->create(['position' => 1, 'number' => 1, 'page_number' => 2, 'quote' => 'A receipt is required']);
+        MessageCitation::factory()->for($answer)->create(['position' => 0, 'number' => 1, 'page_number' => 2, 'quote' => 'within 30 days of purchase']);
 
         $this->fromSpa()->actingAs($this->owner)
             ->getJson("/api/v1/conversations/{$this->conversation->id}/messages/{$answer->id}")
@@ -159,7 +159,7 @@ describe('polling a message', function () {
             ->assertJsonPath('data.answer_found', true)
             ->assertJsonPath('data.citations', [
                 ['number' => 1, 'page_number' => 2, 'quote' => 'within 30 days of purchase'],
-                ['number' => 2, 'page_number' => 2, 'quote' => 'A receipt is required'],
+                ['number' => 1, 'page_number' => 2, 'quote' => 'A receipt is required'], // same source, same marker
             ])
             ->assertJsonMissingPath('data.input_tokens')
             ->assertJsonMissingPath('data.model');

@@ -83,8 +83,8 @@ it('answers with verified citations and records cost and timing', function () {
         ->and($answer->input_tokens)->toBe(1200)
         ->and($answer->output_tokens)->toBe(150)
         ->and($answer->duration_ms)->toBeGreaterThanOrEqual(0)
-        ->and($answer->citations->map->only(['document_chunk_id', 'position', 'page_number', 'quote'])->all())->toBe([[
-            'document_chunk_id' => $this->refundChunk, 'position' => 0, 'page_number' => 2,
+        ->and($answer->citations->map->only(['document_chunk_id', 'position', 'number', 'page_number', 'quote'])->all())->toBe([[
+            'document_chunk_id' => $this->refundChunk, 'position' => 0, 'number' => 1, 'page_number' => 2,
             'quote' => 'return any unused item within 30 days of purchase',
         ]])
         ->and($this->conversation->fresh()->updated_at->isAfter($before))->toBeTrue();

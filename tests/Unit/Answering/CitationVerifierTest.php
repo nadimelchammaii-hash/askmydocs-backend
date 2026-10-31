@@ -33,11 +33,43 @@ it('keeps verified citations and numbers the markers in order of first use', fun
     expect($answer->answerFound)->toBeTrue()
         ->and($answer->text)->toBe('Stores are closed on Sundays [1]. Unused items can be returned within 30 days [2], with a receipt [2].')
         ->and($answer->citations)->toEqual([
-            new VerifiedCitation(102, 3, 'All stores are closed on Sundays'),
-            new VerifiedCitation(101, 2, 'return any unused item within 30 days of purchase'),
-            new VerifiedCitation(101, 2, 'A receipt or order number is required'),
+            new VerifiedCitation(1, 102, 3, 'All stores are closed on Sundays'),
+            new VerifiedCitation(2, 101, 2, 'return any unused item within 30 days of purchase'),
+            new VerifiedCitation(2, 101, 2, 'A receipt or order number is required'),
         ])
         ->and($answer->rejectedCitations)->toBe(0);
+});
+
+it('gives all quotes of one source the number of its single marker', function () {
+    // Seen live: one sentence marked [S1] once, supported by three quotes from S1.
+    $answer = verify([
+        'answer_found' => true,
+        'answer' => 'Unused items can be returned within 30 days with a receipt [S1].',
+        'citations' => [
+            ['source' => 'S1', 'quote' => 'return any unused item within 30 days'],
+            ['source' => 'S1', 'quote' => 'A receipt or order number is required'],
+            ['source' => 'S1', 'quote' => 'Refund and Return Policy'],
+        ],
+    ]);
+
+    expect($answer->text)->toBe('Unused items can be returned within 30 days with a receipt [1].')
+        ->and(array_map(fn (VerifiedCitation $c) => $c->number, $answer->citations))->toBe([1, 1, 1]);
+});
+
+it('numbers sources consecutively, even after several quotes of the first', function () {
+    $answer = verify([
+        'answer_found' => true,
+        'answer' => 'Returns within 30 days with a receipt [S1]. Closed on Sundays [S2].',
+        'citations' => [
+            ['source' => 'S1', 'quote' => 'return any unused item within 30 days'],
+            ['source' => 'S1', 'quote' => 'A receipt or order number is required'],
+            ['source' => 'S2', 'quote' => 'All stores are closed on Sundays'],
+        ],
+    ]);
+
+    // Per-citation numbering would have made the second marker [3], leaving [2] unreferenced.
+    expect($answer->text)->toBe('Returns within 30 days with a receipt [1]. Closed on Sundays [2].')
+        ->and(array_map(fn (VerifiedCitation $c) => $c->number, $answer->citations))->toBe([1, 1, 2]);
 });
 
 it('accepts quotes that differ only in case, spacing, typography or wrapping', function (string $quote) {

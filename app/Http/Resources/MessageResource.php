@@ -9,7 +9,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * Answer text uses markers [1], [2], ... that refer to `citations[].number`.
+ * Answer text uses markers [1], [2], ... that refer to `citations[].number`;
+ * several quotes from the same source share a number.
  * Content is plain text (it may quote the document): clients must never
  * render it as HTML or Markdown.
  *
@@ -36,7 +37,7 @@ class MessageResource extends JsonResource
             'error_message' => $this->error_message,
             'citations' => $isAnswer
                 ? $this->citations->map(fn (MessageCitation $citation) => [
-                    'number' => $citation->position + 1,
+                    'number' => $citation->number,
                     'page_number' => $citation->page_number,
                     'quote' => $citation->quote,
                 ])->all()

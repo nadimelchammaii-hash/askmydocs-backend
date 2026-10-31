@@ -4,7 +4,8 @@ namespace App\Services\Answering;
 
 /**
  * An answer whose citations were all checked against the source text.
- * `text` uses markers [1], [2], ... that refer to `citations` by position + 1.
+ * `text` uses markers [1], [2], ... that refer to `citations[].number`; all
+ * quotes from one source share its number.
  */
 final readonly class VerifiedAnswer
 {

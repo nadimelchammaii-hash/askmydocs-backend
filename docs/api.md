@@ -222,7 +222,7 @@ A conversation belongs to one document. Answers are generated in the background:
 2. Poll `GET /conversations/{id}/messages/{answerId}` until `is_finished` is `true` (suggested: every 1–2 s; answers usually take a few seconds).
 3. Show `content` with its citations, or `error_message` if `status` is `failed`.
 
-**Answer text and citations.** `content` contains markers `[1]`, `[2]` … that refer to `citations[].number`. Each citation has the page and a short quote that the server verified to appear on that page. Render `content` as **plain text only** (never HTML or Markdown): it can contain text from the PDF. When `answer_found` is `false`, `content` explains that the document does not contain the answer and `citations` is empty.
+**Answer text and citations.** `content` contains markers `[1]`, `[2]` … that refer to `citations[].number`. A number stands for one cited passage: several citations can share a number (several quotes from the same passage, listed in order). Each citation has the page and a short quote that the server verified to appear on that page. Render `content` as **plain text only** (never HTML or Markdown): it can contain text from the PDF. When `answer_found` is `false`, `content` explains that the document does not contain the answer and `citations` is empty.
 
 Limits: questions up to 1,000 characters; 10 questions per minute and 100 per day per user (→ `429`, see error codes); one pending answer per conversation.
 
@@ -293,7 +293,7 @@ type MessageRole = 'user' | 'assistant'
 type MessageStatus = 'pending' | 'completed' | 'failed'
 
 interface Citation {
-  number: number // the [n] marker in content
+  number: number // the [n] marker in content; quotes from the same passage share a number
   page_number: number
   quote: string // verified to appear on that page
 }

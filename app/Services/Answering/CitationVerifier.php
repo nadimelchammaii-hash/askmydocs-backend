@@ -10,8 +10,8 @@ use App\Services\Retrieval\RetrievedChunk;
  *
  * A citation is kept only if its label was sent and its quote appears in that
  * source's text (ignoring case, spacing, quote and dash styles). Markers in the
- * answer are rewritten to [1], [2], ... for kept citations and removed for
- * rejected ones. An answer that claims to be found but keeps no citation is
+ * answer are rewritten to [1], [2], ... (one number per cited source, shared by
+ * all its quotes) and removed for sources without a kept citation. An answer that claims to be found but keeps no citation is
  * replaced by the "not found" message: an unsupported answer is worse than none.
  */
 class CitationVerifier
@@ -34,7 +34,7 @@ class CitationVerifier
 
         /** @var list<VerifiedCitation> $kept */
         $kept = [];
-        /** @var array<string, int> label => 1-based number of its first kept citation */
+        /** @var array<string, int> label => marker number (1, 2, ... in order of first kept citation) */
         $numbers = [];
         $seen = [];
         $rejected = 0;
@@ -56,8 +56,8 @@ class CitationVerifier
             }
 
             $seen[$key] = true;
-            $kept[] = new VerifiedCitation($chunk->chunkId, $chunk->pageNumber, $quote);
-            $numbers[$label] ??= count($kept);
+            $numbers[$label] ??= count($numbers) + 1;
+            $kept[] = new VerifiedCitation($numbers[$label], $chunk->chunkId, $chunk->pageNumber, $quote);
         }
 
         if (! $found) {

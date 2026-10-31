@@ -20,6 +20,7 @@ class MessageCitationFactory extends Factory
             'message_id' => Message::factory()->answer(),
             'document_chunk_id' => null,
             'position' => 0,
+            'number' => fn (array $attributes) => $attributes['position'] + 1,
             'page_number' => fake()->numberBetween(1, 20),
             'quote' => fake()->sentence(),
         ];

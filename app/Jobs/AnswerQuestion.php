@@ -218,6 +218,7 @@ class AnswerQuestion implements ShouldBeUnique, ShouldQueue
                 'message_id' => $message->id,
                 'document_chunk_id' => $citation->chunkId,
                 'position' => $position,
+                'number' => $citation->number,
                 'page_number' => $citation->pageNumber,
                 'quote' => $citation->quote,
             ], $verified->citations, array_keys($verified->citations)));

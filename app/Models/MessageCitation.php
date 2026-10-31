@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * A page reference supporting an answer. `quote` was verified to appear in the
  * cited chunk; it is document text (untrusted data).
  */
-#[Fillable(['message_id', 'document_chunk_id', 'position', 'page_number', 'quote'])]
+#[Fillable(['message_id', 'document_chunk_id', 'position', 'number', 'page_number', 'quote'])]
 class MessageCitation extends Model
 {
     /** @use HasFactory<MessageCitationFactory> */
@@ -27,6 +27,7 @@ class MessageCitation extends Model
     {
         return [
             'position' => 'integer',
+            'number' => 'integer',
             'page_number' => 'integer',
         ];
     }
