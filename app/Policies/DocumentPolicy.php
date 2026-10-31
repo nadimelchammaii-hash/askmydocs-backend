@@ -17,6 +17,12 @@ class DocumentPolicy
         return $this->ownerOnly($user, $document);
     }
 
+    /** Rename the document. */
+    public function update(User $user, Document $document): Response
+    {
+        return $this->ownerOnly($user, $document);
+    }
+
     public function delete(User $user, Document $document): Response
     {
         return $this->ownerOnly($user, $document);

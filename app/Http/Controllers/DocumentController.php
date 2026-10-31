@@ -5,12 +5,13 @@ namespace App\Http\Controllers;
 use App\Actions\Documents\DeleteDocument;
 use App\Actions\Documents\RetryDocument;
 use App\Actions\Documents\StoreDocument;
+use App\Http\Requests\Documents\ListDocumentsRequest;
+use App\Http\Requests\Documents\RenameDocumentRequest;
 use App\Http\Requests\Documents\StoreDocumentRequest;
 use App\Http\Resources\DocumentPageResource;
 use App\Http\Resources\DocumentResource;
 use App\Models\Document;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
@@ -24,9 +25,15 @@ class DocumentController extends Controller
 {
     private const PER_PAGE = 20;
 
-    public function index(Request $request): AnonymousResourceCollection
+    /**
+     * The user's documents, newest first; optionally by status and title search.
+     */
+    public function index(ListDocumentsRequest $request): AnonymousResourceCollection
     {
         $documents = $request->user()->documents()
+            ->when($request->validated('status'), fn ($query, string $status) => $query->where('status', $status))
+            ->when($request->searchPattern(), fn ($query, string $pattern) => $query->where('title', 'ilike', $pattern))
+            ->withCount('conversations')
             ->latest()
             ->latest('id') // ULIDs are time-ordered: a stable tie-breaker for equal timestamps.
             ->paginate(self::PER_PAGE);
@@ -79,6 +86,13 @@ class DocumentController extends Controller
     public function retry(Document $document, RetryDocument $retryDocument): JsonResponse
     {
         return (new DocumentResource($retryDocument->handle($document)))->response()->setStatusCode(202);
+    }
+
+    public function update(RenameDocumentRequest $request, Document $document): DocumentResource
+    {
+        $document->update(['title' => $request->validated('title')]);
+
+        return new DocumentResource($document);
     }
 
     public function destroy(Document $document, DeleteDocument $deleteDocument): Response

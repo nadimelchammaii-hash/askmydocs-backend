@@ -4,7 +4,7 @@ Laravel REST API for AskMyDocs: upload PDF documents and ask questions about the
 
 The UI is a separate application in its own repository: **askmydocs-frontend** (Vue 3 + Vuetify). The API contract shared by both is documented in [`docs/api.md`](docs/api.md).
 
-> Status: Phase 4 complete (upload, extraction, embeddings, retrieval, cited answers). Next: Phase 5, conversation and document management APIs.
+> Status: Phase 5 complete (documents, cited answers, conversation and document management). Next: Phase 6, UI design (Google Stitch).
 
 ## Stack
 

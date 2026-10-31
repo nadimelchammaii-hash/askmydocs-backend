@@ -39,10 +39,18 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('{document}/file', 'file')->can('view', 'document')->name('file');
         Route::get('{document}/pages/{pageNumber}', 'page')->whereNumber('pageNumber')->can('view', 'document')->name('pages.show');
         Route::post('{document}/retry', 'retry')->middleware('throttle:uploads')->can('retry', 'document')->name('retry');
+        Route::patch('{document}', 'update')->can('update', 'document')->name('update');
         Route::delete('{document}', 'destroy')->can('delete', 'document')->name('destroy');
     });
 
     Route::controller(ConversationController::class)->group(function () {
+        Route::get('conversations', 'index')->name('conversations.index');
+        Route::get('conversations/{conversation}', 'show')->can('view', 'conversation')->name('conversations.show');
+        Route::patch('conversations/{conversation}', 'update')->can('update', 'conversation')->name('conversations.update');
+        Route::delete('conversations/{conversation}', 'destroy')->can('delete', 'conversation')->name('conversations.destroy');
+        Route::post('conversations/{conversation}/messages/{message}/retry', 'retryAnswer')
+            ->scopeBindings()->middleware('throttle:questions')->can('ask', 'conversation')->name('conversations.messages.retry');
+
         Route::post('documents/{document}/conversations', 'store')
             ->middleware('throttle:questions')->can('view', 'document')->name('conversations.store');
         Route::post('conversations/{conversation}/questions', 'ask')

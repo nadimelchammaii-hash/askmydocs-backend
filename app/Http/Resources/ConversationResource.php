@@ -20,6 +20,12 @@ class ConversationResource extends JsonResource
             'id' => $this->id,
             'document_id' => $this->document_id,
             'title' => $this->title,
+            // In lists: the document's title, to show which document a conversation is about.
+            'document' => $this->whenLoaded('document', fn () => [
+                'id' => $this->document->id,
+                'title' => $this->document->title,
+            ]),
+            'messages_count' => $this->whenCounted('messages'),
             'messages' => MessageResource::collection($this->whenLoaded('messages')),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),

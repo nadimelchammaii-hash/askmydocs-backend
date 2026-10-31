@@ -5,7 +5,7 @@ Source of truth for the API used by **askmydocs-frontend**. The two applications
 - **Base URL (local):** `http://localhost:8000`
 - **API prefix:** `/api/v1`
 - **Format:** JSON requests and responses. Send `Accept: application/json`.
-- **Status:** Phase 2 — authentication, profile and documents. Conversations and messages are added in later phases.
+- **Status:** Phase 5 — authentication, profile, documents, questions with cited answers, and conversation management.
 
 ## Authentication model
 
@@ -57,7 +57,7 @@ Every API error has the same shape:
 | 401 | `unauthenticated` | No valid session → treat as logged out |
 | 403 | `forbidden` | Authenticated but not allowed |
 | 404 | `not_found` | Resource does not exist **or belongs to another user** (see Ownership) |
-| 409 | `conflict`, or a specific code | The action does not fit the current state. Specific codes: `document_not_ready`, `answer_pending` |
+| 409 | `conflict`, or a specific code | The action does not fit the current state. Specific codes: `document_not_ready`, `answer_pending`, `answer_not_failed` |
 | 413 | `payload_too_large` | Request body above the server's limit (normally caught earlier as a 422 on `file`) |
 | 419 | `csrf_token_mismatch` | CSRF token missing/expired → call `/sanctum/csrf-cookie` and retry once |
 | 422 | `validation_failed` | Show `errors` next to form fields |
@@ -172,9 +172,15 @@ New statuses may be added between `queued` and `ready`; clients should rely on `
 
 #### `GET /api/v1/documents`
 
-The user's documents, newest first, 20 per page (`?page=2`).
+The user's documents, newest first, 20 per page. Each includes `conversations_count`.
 
-→ `200` `{ "data": Document[], "links": {...}, "meta": { "current_page", "last_page", "per_page", "total", ... } }`
+| Query parameter | Meaning |
+|---|---|
+| `page` | Page number (default 1) |
+| `status` | Only documents with this status (`queued`, `extracting`, `embedding`, `ready`, `failed`) |
+| `search` | Case-insensitive text in the title (max 100 characters; `%` and `_` are literal) |
+
+→ `200` `{ "data": Document[], "links": {...}, "meta": { "current_page", "last_page", "per_page", "total", ... } }`. → `422` for an unknown status or a too long search.
 
 #### `POST /api/v1/documents`
 
@@ -207,6 +213,14 @@ Extracted text of page `n` (1-based); available once the document is `ready`. Us
 Re-queues processing of a `failed` document (rate limit shared with uploads). Retrying makes most sense for `extraction_timeout` / `extraction_failed`; problems with the file itself fail again.
 
 → `202` `{ "data": Document }` with `status: "queued"`. → `409 conflict` if the document is not `failed`.
+
+#### `PATCH /api/v1/documents/{id}`
+
+```json
+{ "title": "Store Handbook 2026" }
+```
+
+Renames the document (max 255 characters; other fields are ignored). → `200` `{ "data": Document }`. → `422` with `errors.title`.
 
 #### `DELETE /api/v1/documents/{id}`
 
@@ -250,6 +264,42 @@ The last two exchanges are used to understand follow-ups. → `202` `{ "data": {
 
 Failed answers carry `error_code`: `answer_failed` (try again), `answer_refused` (rephrase the question) or `document_not_ready`.
 
+#### `POST /api/v1/conversations/{id}/messages/{messageId}/retry`
+
+Asks again for a **failed** answer, with the same question (counts toward the question limits). → `202` `{ "data": Message }` (pending again: poll it).
+→ `409 answer_not_failed` if the message is not a failed answer. → `409 answer_pending` while another answer is pending. → `409 document_not_ready`.
+
+### Managing conversations (all authenticated)
+
+#### `GET /api/v1/conversations`
+
+The user's conversations, most recently active first, 20 per page. Each includes `document: { id, title }` and `messages_count` (no messages).
+
+| Query parameter | Meaning |
+|---|---|
+| `page` | Page number (default 1) |
+| `document_id` | Only conversations about this document (another user's document simply gives an empty list) |
+
+→ `200` paginated `{ "data": Conversation[], "links", "meta" }`. → `422` for a malformed `document_id`.
+
+#### `GET /api/v1/conversations/{id}`
+
+The whole conversation: `document`, and `messages` (oldest first) with their citations. → `200` `{ "data": Conversation }`.
+
+#### `PATCH /api/v1/conversations/{id}`
+
+```json
+{ "title": "Refund questions" }
+```
+
+→ `200` `{ "data": Conversation }`. → `422` with `errors.title` (required, max 200 characters).
+
+#### `DELETE /api/v1/conversations/{id}`
+
+Deletes the conversation with its messages and citations; the document stays. A pending answer is simply never stored. → `204`.
+
+All conversation endpoints answer `404 not_found` for unknown and other users' conversations.
+
 ## Types
 
 ```ts
@@ -274,6 +324,7 @@ interface Document {
   error_message: string | null
   created_at: string
   processed_at: string | null
+  conversations_count?: number // in lists
 }
 
 interface DocumentPage {
@@ -316,7 +367,9 @@ interface Conversation {
   id: string // ULID
   document_id: string
   title: string
-  messages?: Message[] // oldest first
+  messages?: Message[] // oldest first (when reading one conversation)
+  document?: { id: string; title: string }
+  messages_count?: number // in lists
   created_at: string
   updated_at: string
 }

@@ -30,6 +30,7 @@ class DocumentResource extends JsonResource
             'error_message' => $this->error_message,
             'created_at' => $this->created_at?->toIso8601String(),
             'processed_at' => $this->processed_at?->toIso8601String(),
+            'conversations_count' => $this->whenCounted('conversations'),
         ];
     }
 }

@@ -70,6 +70,34 @@ class AskQuestion
     }
 
     /**
+     * Asks again for a failed answer, with the same question.
+     */
+    public function retryAnswer(Conversation $conversation, Message $answer): Message
+    {
+        $this->ensureReady($conversation->document);
+
+        return DB::transaction(function () use ($conversation, $answer) {
+            Conversation::whereKey($conversation->id)->lockForUpdate()->first();
+            $answer = Message::whereKey($answer->id)->lockForUpdate()->firstOrFail();
+
+            if ($answer->role !== MessageRole::Assistant || $answer->status !== MessageStatus::Failed) {
+                throw ApiException::conflict('answer_not_failed', 'Only failed answers can be retried.');
+            }
+
+            if ($conversation->messages()->where('status', MessageStatus::Pending)->exists()) {
+                throw ApiException::conflict('answer_pending', 'Wait for the current answer before retrying.');
+            }
+
+            $answer->update(['status' => MessageStatus::Pending, 'error_code' => null, 'error_message' => null]);
+            $conversation->touch();
+
+            AnswerQuestion::dispatch($answer)->afterCommit();
+
+            return $answer;
+        });
+    }
+
+    /**
      * @return array{Message, Message}
      */
     private function storeMessages(Conversation $conversation, string $question): array

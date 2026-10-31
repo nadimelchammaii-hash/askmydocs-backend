@@ -8,7 +8,7 @@ it('allows the owner to view, delete and retry a document', function (string $ab
     $document = Document::factory()->create();
 
     expect(Gate::forUser($document->user)->inspect($ability, $document)->allowed())->toBeTrue();
-})->with(['view', 'delete', 'retry']);
+})->with(['view', 'update', 'delete', 'retry']);
 
 it('hides other users\' documents with a 404', function (string $ability) {
     $document = Document::factory()->create();
@@ -18,4 +18,4 @@ it('hides other users\' documents with a 404', function (string $ability) {
 
     expect($response->denied())->toBeTrue()
         ->and($response->status())->toBe(404);
-})->with(['view', 'delete', 'retry']);
+})->with(['view', 'update', 'delete', 'retry']);
