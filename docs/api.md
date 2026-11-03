@@ -149,6 +149,25 @@ Any subset of:
 
 → `204`. → `422` with `errors.current_password` if the current password is wrong. Other sessions of the user are logged out on their next request.
 
+### `GET /api/v1/stats` (authenticated)
+
+Numbers for the dashboard, about the current user only.
+
+```json
+{
+  "data": {
+    "documents": { "total": 5, "ready": 2, "processing": 2, "failed": 1 },
+    "pages_indexed": 42,
+    "conversations": 7,
+    "questions_today": { "used": 12, "limit": 100, "remaining": 88, "resets_at": "2026-11-04T00:00:00+00:00" }
+  }
+}
+```
+
+- `processing`: documents that are not finished yet (any status between `queued` and `ready`).
+- `pages_indexed`: pages of `ready` documents (the ones questions can be asked about).
+- `questions_today`: question requests counted by the daily limit since midnight UTC; `resets_at` is the next midnight UTC.
+
 ### Documents (all authenticated)
 
 A document goes through these statuses after upload:
@@ -238,7 +257,7 @@ A conversation belongs to one document. Answers are generated in the background:
 
 **Answer text and citations.** `content` contains markers `[1]`, `[2]` … that refer to `citations[].number`. A number stands for one cited passage: several citations can share a number (several quotes from the same passage, listed in order). Each citation has the page and a short quote that the server verified to appear on that page. Render `content` as **plain text only** (never HTML or Markdown): it can contain text from the PDF. When `answer_found` is `false`, `content` explains that the document does not contain the answer and `citations` is empty.
 
-Limits: questions up to 1,000 characters; 10 questions per minute and 100 per day per user (→ `429`, see error codes); one pending answer per conversation.
+Limits: questions up to 1,000 characters; 10 questions per minute and 100 per day per user, where a day starts at midnight UTC (→ `429`, see error codes; `GET /stats` shows today's count); one pending answer per conversation.
 
 #### `POST /api/v1/documents/{id}/conversations`
 

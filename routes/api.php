@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\SessionController;
 use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\StatsController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -31,6 +32,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('user', [ProfileController::class, 'show'])->name('user.show');
     Route::patch('user', [ProfileController::class, 'update'])->name('user.update');
     Route::put('user/password', [ProfileController::class, 'updatePassword'])->name('user.password');
+
+    Route::get('stats', StatsController::class)->name('stats');
 
     Route::prefix('documents')->name('documents.')->controller(DocumentController::class)->group(function () {
         Route::get('/', 'index')->name('index');

@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\User;
+use App\Services\Answers\QuestionLimits;
 use App\Services\Chunking\TextChunker;
 use App\Services\Embeddings\EmbeddingClient;
 use App\Services\Embeddings\OpenAiEmbeddingClient;
@@ -97,16 +98,8 @@ class AppServiceProvider extends ServiceProvider
         });
 
         // Every question can cost an OpenAI call: limit bursts and daily volume per user.
-        RateLimiter::for('questions', function (Request $request): array {
-            $key = (string) $request->user()?->id ?: $request->ip();
-
-            return [
-                Limit::perMinute(config('answers.questions_per_minute'))->by($key),
-                Limit::perDay(config('answers.questions_per_day'))->by($key)->response(fn () => response()->json([
-                    'message' => 'You have reached today\x27s question limit. Please try again tomorrow.',
-                    'code' => 'daily_limit_reached',
-                ], 429)),
-            ];
+        RateLimiter::for(QuestionLimits::LIMITER, function (Request $request): array {
+            return QuestionLimits::for((string) $request->user()?->id ?: (string) $request->ip());
         });
 
         // Each upload stores up to 20 MB and runs pdfinfo, so uploads are limited per user.
