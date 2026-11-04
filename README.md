@@ -115,11 +115,16 @@ One-time setup:
 docker network create --subnet 10.250.250.0/24 askmydocs-proxy
 ```
 
-In the other project: attach its Caddy service to that network (`networks: [default, askmydocs-proxy]`, with `askmydocs-proxy` declared as `external: true`), add a site block, then reload Caddy:
+In the other project: attach its Caddy service to that network (`networks: [default, askmydocs-proxy]`, with `askmydocs-proxy` declared as `external: true`), add the site blocks (`www` redirects to the main address: the sign-in cookie works on one host only), then reload Caddy:
 
 ```caddyfile
 askmydocs.example.com {
+	header -Via
 	reverse_proxy askmydocs-web:80
+}
+
+www.askmydocs.example.com {
+	redir https://askmydocs.example.com{uri} permanent
 }
 ```
 
@@ -134,7 +139,7 @@ Resources: every container has a memory limit (about 210 MB in use when idle, ab
 1. Point the domain's DNS (A/AAAA record) to the server and open ports 80 and 443.
 2. In `.env.production`: `SITE_ADDRESS=askmydocs.example.com`, `WEB_BIND=0.0.0.0`, and `APP_URL`, `FRONTEND_URL` (`https://askmydocs.example.com`) and `SANCTUM_STATEFUL_DOMAINS` (`askmydocs.example.com`). Caddy then gets a Let's Encrypt certificate on its own.
 3. Once HTTPS works, delete the `HSTS` line (the default is one year).
-4. Email: delete `COMPOSE_PROFILES=mailpit` and set the SMTP values of a provider (Postmark, Mailgun, Amazon SES, Brevo...): `MAIL_HOST`, `MAIL_PORT=587`, `MAIL_USERNAME`, `MAIL_PASSWORD` and a `MAIL_FROM_ADDRESS` on a domain verified with the provider (SPF/DKIM), or password-reset emails will land in spam.
+4. Email: delete `COMPOSE_PROFILES=mailpit` and set the SMTP values of a provider (Postmark, Mailgun, Amazon SES, Brevo...): `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD` and a `MAIL_FROM_ADDRESS` on a domain verified with the provider (SPF/DKIM), or password-reset emails will land in spam or be refused. Many cloud providers, DigitalOcean among them, block outgoing ports 25, 465 and 587: check with `nc -zv <MAIL_HOST> 587` on the server and use the provider's alternative port if needed (Brevo: `smtp-relay.brevo.com`, port `2525`). The app waits at most `MAIL_TIMEOUT` (10) seconds for the mail server, so a mail problem fails quickly with an error in the log instead of hanging the request.
 
 ### Backups
 
@@ -146,6 +151,31 @@ sh docker/prod/restore.sh backups/askmydocs-<time>.dump --yes
 ```
 
 Run backups on a schedule (e.g. cron, daily) and keep a copy off the server. Backups contain user documents and password hashes: keep them private. In Git Bash on Windows, run `export MSYS_NO_PATHCONV=1` first, so container paths are not converted to Windows paths.
+
+### Runbook (live server: askmydocs.org)
+
+AskMyDocs runs on the Pulseboard droplet in `~/askmydocs` (compose files, backup scripts, `.env.production`), behind Pulseboard's Caddy (`/opt/pulseboard/Caddyfile`, site blocks for `askmydocs.org` and `www`). Every command below runs in `~/askmydocs`:
+
+```sh
+C="docker compose -f compose.prod.yaml -f compose.shared.yaml --env-file .env.production"
+```
+
+| Task | Commands |
+|---|---|
+| Status | `$C ps` and `docker stats --no-stream` (memory per container; limits in `compose.prod.yaml`); `free -h` (swap) |
+| Logs | `$C logs --since 1h app worker-documents worker-answers` |
+| Deploy a new version | 1. CI green on `main`, images published. 2. In `.env.production`, set `API_IMAGE` / `WEB_IMAGE` to the new commit tags. 3. `$C pull`, `sh docker/prod/backup.sh`, `$C run --rm app php artisan migrate --force`, `$C up -d` |
+| Roll back | Set the previous tags in `.env.production`, then `$C up -d`. If the new version changed the database, restore the backup taken before the deploy |
+| Change a setting | Edit `.env.production`, then `$C up -d` (recreates the containers, which cache their configuration at start) |
+| Backup / restore | `sh docker/prod/backup.sh` (to `backups/`); `sh docker/prod/restore.sh backups/<file>.dump --yes` |
+| Change the front Caddy | Edit `/opt/pulseboard/Caddyfile` **in place** (it is mounted as a single file: an editor that replaces the file leaves the container on the old version), then `docker exec pulseboard-prod-caddy-1 caddy validate --config /etc/caddy/Caddyfile` and `... caddy reload --config /etc/caddy/Caddyfile` (no downtime) |
+
+Things to know:
+
+- Outgoing SMTP ports 25, 465 and 587 are blocked by DigitalOcean; email goes to Brevo on port 2525.
+- The `askmydocs-proxy` network (10.250.250.0/24) joins only the two Caddy containers. Pulseboard's `docker-compose.prod.yml` declares it, so Pulseboard deploys keep the connection.
+- Everything restarts on its own after a reboot (verified): Docker starts at boot and every container has `restart: unless-stopped`.
+- Verified at launch (November 2026): SSL Labs A+, HSTS one year, visitor addresses reach Laravel (per-visitor rate limits), about 300 MB of memory in use next to Pulseboard.
 
 ### Logs
 

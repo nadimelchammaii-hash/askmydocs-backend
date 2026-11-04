@@ -3,6 +3,7 @@
 use App\Models\User;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
 
@@ -32,6 +33,13 @@ it('gives the same response for unknown emails and sends nothing', function () {
     $unknown->assertOk();
     expect($unknown->json())->toBe($known->json());
     Notification::assertSentTimes(ResetPassword::class, 1);
+});
+
+it('waits at most 10 seconds for the mail server', function () {
+    // An unreachable mail server must not hang the reset request for PHP's default 60 s.
+    $transport = Mail::mailer('smtp')->getSymfonyTransport();
+
+    expect($transport->getStream()->getTimeout())->toEqual(10.0);
 });
 
 it('resets the password with a valid token', function () {
