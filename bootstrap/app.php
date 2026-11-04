@@ -1,6 +1,7 @@
 <?php
 
 use App\Exceptions\ApiErrorFormatter;
+use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -17,6 +18,12 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA mode: requests from SANCTUM_STATEFUL_DOMAINS get session cookies and CSRF protection.
         $middleware->statefulApi();
+
+        // A general per-user limit for every API route (the "api" limiter, AppServiceProvider).
+        // Expensive routes (login, uploads, questions) have stricter limits of their own.
+        $middleware->throttleApi();
+
+        $middleware->append(SecurityHeaders::class);
 
         // There is no server-rendered login page. Without this, an unauthenticated request that
         // does not send "Accept: application/json" fails with "Route [login] not defined" (500)

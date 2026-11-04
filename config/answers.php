@@ -38,4 +38,12 @@ return [
 
     'questions_per_day' => (int) env('QUESTIONS_PER_DAY', 100),
 
+    /*
+    | An answer still pending this many minutes after it was asked (or retried)
+    | is marked failed by work:fail-stalled, so the conversation can continue.
+    | The answer job takes at most 3 x 120 s plus back-off (about 7 minutes).
+    */
+
+    'stalled_after_minutes' => (int) env('ANSWERS_STALLED_AFTER_MINUTES', 10),
+
 ];

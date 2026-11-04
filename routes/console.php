@@ -10,3 +10,10 @@ Artisan::command('inspire', function () {
 
 // Runs when the scheduler runs: `php artisan schedule:work` locally, cron + `schedule:run` in production.
 Schedule::command('documents:prune-orphans')->hourly()->withoutOverlapping();
+
+// Answers and documents that will not finish on their own (e.g. no worker running).
+Schedule::command('work:fail-stalled')->everyFiveMinutes()->withoutOverlapping();
+
+// Housekeeping: failed queue jobs after a week, expired password reset tokens.
+Schedule::command('queue:prune-failed', ['--hours' => 168])->daily();
+Schedule::command('auth:clear-resets')->daily();

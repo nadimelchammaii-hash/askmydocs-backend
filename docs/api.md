@@ -61,7 +61,7 @@ Every API error has the same shape:
 | 413 | `payload_too_large` | Request body above the server's limit (normally caught earlier as a 422 on `file`) |
 | 419 | `csrf_token_mismatch` | CSRF token missing/expired → call `/sanctum/csrf-cookie` and retry once |
 | 422 | `validation_failed` | Show `errors` next to form fields |
-| 429 | `too_many_requests` | Rate limited; `Retry-After` header gives seconds to wait |
+| 429 | `too_many_requests` | Rate limited; `Retry-After` header gives seconds to wait. Every route allows 300 requests per minute per user (per IP for guests); some routes have stricter limits |
 | 429 | `daily_limit_reached` | Daily question limit reached; try again tomorrow |
 | 500 | `server_error` | Generic message only; details are in the server log |
 
@@ -188,6 +188,7 @@ New statuses may be added between `queued` and `ready`; clients should rely on `
 | `extraction_timeout` / `extraction_failed` | Processing failed after 3 attempts; retrying later may help |
 | `file_missing` | The stored file is gone; upload again |
 | `embedding_failed` | Preparing the text for questions failed (AI provider unavailable or misconfigured); retry later |
+| `processing_stalled` | Processing did not finish within an hour (e.g. no worker was running); retry |
 
 #### `GET /api/v1/documents`
 
@@ -281,7 +282,7 @@ The last two exchanges are used to understand follow-ups. → `202` `{ "data": {
 
 → `200` `{ "data": Message }`. → `404` if the message does not belong to that conversation.
 
-Failed answers carry `error_code`: `answer_failed` (try again), `answer_refused` (rephrase the question) or `document_not_ready`.
+Failed answers carry `error_code`: `answer_failed` (try again; also used when an answer stays pending for more than 10 minutes), `answer_refused` (rephrase the question) or `document_not_ready`.
 
 #### `POST /api/v1/conversations/{id}/messages/{messageId}/retry`
 

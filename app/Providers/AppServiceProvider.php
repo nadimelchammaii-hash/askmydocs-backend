@@ -3,7 +3,7 @@
 namespace App\Providers;
 
 use App\Models\User;
-use App\Services\Answers\QuestionLimits;
+use App\Services\Answering\QuestionLimits;
 use App\Services\Chunking\TextChunker;
 use App\Services\Embeddings\EmbeddingClient;
 use App\Services\Embeddings\OpenAiEmbeddingClient;
@@ -93,6 +93,13 @@ class AppServiceProvider extends ServiceProvider
      */
     private function configureRateLimiting(): void
     {
+        // Every API route: generous for normal use, including the SPA's polling
+        // (which backs off on 429), but stops scripted floods.
+        RateLimiter::for('api', function (Request $request): Limit {
+            return Limit::perMinute(config('app.api_requests_per_minute'))
+                ->by((string) $request->user()?->id ?: (string) $request->ip());
+        });
+
         RateLimiter::for('login', function (Request $request): Limit {
             return Limit::perMinute(5)->by(Str::lower((string) $request->input('email')).'|'.$request->ip());
         });

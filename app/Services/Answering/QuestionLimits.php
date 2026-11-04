@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services\Answers;
+namespace App\Services\Answering;
 
 use App\Models\User;
 use Carbon\CarbonImmutable;

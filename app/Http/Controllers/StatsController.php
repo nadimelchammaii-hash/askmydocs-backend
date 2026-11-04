@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DocumentStatus;
-use App\Services\Answers\QuestionLimits;
+use App\Services\Answering\QuestionLimits;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 

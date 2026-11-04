@@ -66,4 +66,19 @@ return [
         'overlap_chars' => (int) env('CHUNK_OVERLAP_CHARS', 200),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Stalled Processing
+    |--------------------------------------------------------------------------
+    |
+    | A document still processing this many minutes after its last status
+    | change is marked failed (and can be retried) by work:fail-stalled, e.g.
+    | when no worker is running. Must stay above the longest normal processing
+    | time: extraction (3 x 120 s + back-off) plus embedding (4 x 240 s +
+    | back-off) is about 35 minutes in the worst case.
+    |
+    */
+
+    'stalled_after_minutes' => (int) env('DOCUMENTS_STALLED_AFTER_MINUTES', 60),
+
 ];
