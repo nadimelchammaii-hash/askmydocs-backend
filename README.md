@@ -105,6 +105,30 @@ WEB_IMAGE=ghcr.io/<owner>/askmydocs-web:<commit-sha>
 
 Replace `build` with `docker compose -f compose.prod.yaml --env-file .env.production pull` in the steps above. Use commit tags rather than `latest`, so a deployment is always an exact, known version; to roll back, set the previous tag and run `up -d`. Packages of a private repository are private: log in once on the server with `docker login ghcr.io` and a token that has only the `read:packages` permission.
 
+### Shared server (behind another project's Caddy)
+
+When another project on the same server already owns ports 80/443 with its own Caddy, that Caddy also serves this site and forwards it to the `web` container. [`compose.shared.yaml`](compose.shared.yaml) adds this mode: `web` publishes no port, serves plain HTTP inside Docker, and joins a small network (`askmydocs-proxy`) that only the two Caddy containers share. The database and PHP stay on AskMyDocs' own networks.
+
+One-time setup:
+
+```sh
+docker network create --subnet 10.250.250.0/24 askmydocs-proxy
+```
+
+In the other project: attach its Caddy service to that network (`networks: [default, askmydocs-proxy]`, with `askmydocs-proxy` declared as `external: true`), add a site block, then reload Caddy:
+
+```caddyfile
+askmydocs.example.com {
+	reverse_proxy askmydocs-web:80
+}
+```
+
+Then add `-f compose.shared.yaml` after `-f compose.prod.yaml` in every command, e.g. `docker compose -f compose.prod.yaml -f compose.shared.yaml --env-file .env.production up -d`. `SITE_ADDRESS`, `WEB_BIND` and `HSTS` are not used in this mode; HTTPS and the certificate come from the other Caddy.
+
+Visitor addresses: requests reach AskMyDocs from the front Caddy, so both the inner Caddy and Laravel trust forwarded headers from the `askmydocs-proxy` subnet only (`TRUSTED_PROXIES`, [`config/trustedproxy.php`](config/trustedproxy.php)). Laravel then sees each visitor's real address (rate limits stay per visitor) and HTTPS. Only `X-Forwarded-For` and `X-Forwarded-Proto` are accepted; the host is never taken from a header.
+
+Resources: every container has a memory limit (about 210 MB in use when idle, about 250 MB after uploads and answers), logs are capped at 3 × 10 MB per container, PHP-FPM starts at most `PHP_FPM_MAX_CHILDREN` (4) workers on demand, and PostgreSQL uses `PG_SHARED_BUFFERS` (64MB). A process that exceeds its container's limit is stopped and only that container is affected, never the other project. Add swap on a 2 GB server.
+
 ### Moving to a real domain
 
 1. Point the domain's DNS (A/AAAA record) to the server and open ports 80 and 443.

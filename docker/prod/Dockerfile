@@ -46,6 +46,9 @@ RUN sed -i 's/\r$//' /usr/local/bin/askmydocs-entrypoint && chmod +x /usr/local/
 
 RUN useradd --uid 1000 --no-create-home app
 
+# Maximum PHP-FPM workers (docker/prod/php-fpm.conf); override in .env.production.
+ENV PHP_FPM_MAX_CHILDREN=4
+
 # The code belongs to root and is read-only for the app user; only storage/ (a volume
 # in production) and bootstrap/cache (config/route caches written at start) are writable.
 COPY --from=build /app /app

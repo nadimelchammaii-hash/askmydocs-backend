@@ -25,6 +25,11 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->append(SecurityHeaders::class);
 
+        // Behind a reverse proxy (config/trustedproxy.php), accept only the visitor's IP address
+        // and the original scheme from it. The forwarded host, port and prefix are ignored, so
+        // URLs and the stateful-domain check always use the real Host header.
+        $middleware->trustProxies(headers: Request::HEADER_X_FORWARDED_FOR | Request::HEADER_X_FORWARDED_PROTO);
+
         // There is no server-rendered login page. Without this, an unauthenticated request that
         // does not send "Accept: application/json" fails with "Route [login] not defined" (500)
         // instead of a 401.

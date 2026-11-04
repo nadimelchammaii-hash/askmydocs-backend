@@ -18,8 +18,19 @@
 #   COMPOSE_PROFILES=mailpit. On a server, remove that line and set a real SMTP provider.
 # - Backups: docker/prod/backup.sh and restore.sh.
 # - Separate project name and volumes, so it can run next to the development stack.
+# - On a server shared with another project (whose Caddy already owns ports 80/443), add
+#   compose.shared.yaml: -f compose.prod.yaml -f compose.shared.yaml
+# - Every container has a memory limit and capped logs, so this stack can never use up
+#   the memory or disk of a shared server.
 
 name: askmydocs-prod
+
+# Container logs are rotated: at most 3 files of 10 MB per container.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
 
 # Shared by the API, workers and scheduler. Only `app` builds the image; the others reuse it.
 x-php: &php
@@ -28,6 +39,7 @@ x-php: &php
   image: ${API_IMAGE:-askmydocs-api:prod}
   pull_policy: never
   restart: unless-stopped
+  logging: *logging
   # Laravel reads its settings from these environment variables (there is no .env file
   # in the image). They are cached at start (`php artisan optimize` in the entrypoint).
   env_file: .env.production
@@ -50,6 +62,8 @@ services:
     # WEB_IMAGE: an image published by the frontend's CI; default: built locally.
     image: ${WEB_IMAGE:-askmydocs-web:prod}
     restart: unless-stopped
+    logging: *logging
+    mem_limit: 96m
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:?Set SITE_ADDRESS in .env.production}
       HSTS: ${HSTS:-max-age=31536000}
@@ -76,6 +90,8 @@ services:
       dockerfile: docker/prod/Dockerfile
     pull_policy: missing
     networks: [edge, backend]
+    # PHP-FPM starts up to PHP_FPM_MAX_CHILDREN (default 4) workers on demand.
+    mem_limit: 384m
     healthcheck:
       # PHP-FPM accepts connections on port 9000.
       test: ["CMD", "php", "-r", "exit(@fsockopen('127.0.0.1', 9000) ? 0 : 1);"]
@@ -89,20 +105,41 @@ services:
     <<: *php
     command: ["php", "artisan", "queue:work", "--queue=answers", "--tries=3", "--max-time=3600"]
     stop_grace_period: 90s
+    mem_limit: 192m
 
   worker-documents:
     <<: *php
     command: ["php", "artisan", "queue:work", "--queue=documents", "--tries=3", "--max-time=3600"]
     # Lets a running document job (up to 240 s) finish when the stack stops.
     stop_grace_period: 260s
+    # PDF text extraction and embedding batches.
+    mem_limit: 384m
 
   scheduler:
     <<: *php
     command: ["php", "artisan", "schedule:work"]
+    # Runs each scheduled command as a separate PHP process.
+    mem_limit: 192m
 
   db:
     image: pgvector/pgvector:0.8.7-pg18
     restart: unless-stopped
+    logging: *logging
+    # Memory settings for a small (possibly shared) server; PG_SHARED_BUFFERS can be raised
+    # in .env.production on a bigger one (about a quarter of the memory limit).
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-64MB}
+      - -c
+      - effective_cache_size=256MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - max_connections=30
+    mem_limit: 384m
     environment:
       POSTGRES_DB: ${DB_DATABASE:?Set DB_DATABASE in .env.production}
       POSTGRES_USER: ${DB_USERNAME:?Set DB_USERNAME in .env.production}
@@ -122,6 +159,8 @@ services:
     image: axllent/mailpit:v1.31.6
     profiles: [mailpit]
     restart: unless-stopped
+    logging: *logging
+    mem_limit: 64m
     ports:
       - "127.0.0.1:8025:8025"
     networks: [backend]
