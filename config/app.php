@@ -56,6 +56,31 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Frontend URL
+    |--------------------------------------------------------------------------
+    |
+    | Base URL of the separate Vue SPA (askmydocs-frontend). Used for links
+    | that users open in the browser, such as password reset emails.
+    |
+    */
+
+    'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | API Rate Limit
+    |--------------------------------------------------------------------------
+    |
+    | Requests per minute per user (per IP address for guests) for every API
+    | route. Routes with their own stricter limits (login, uploads, questions)
+    | count against both.
+    |
+    */
+
+    'api_requests_per_minute' => (int) env('API_REQUESTS_PER_MINUTE', 300),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

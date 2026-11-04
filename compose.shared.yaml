@@ -1,0 +1,38 @@
+# Addition to compose.prod.yaml for a server SHARED with another project whose Caddy already
+# owns ports 80/443 (and gets the HTTPS certificates). That Caddy forwards this site's domain
+# to the `web` container over a small Docker network that only the two Caddy containers join:
+#
+#   Internet -> other project's Caddy (HTTPS) -> askmydocs-web:80 -> PHP-FPM -> PostgreSQL
+#
+# One-time setup on the server (see "Shared server" in README.md):
+#   docker network create --subnet 10.250.250.0/24 askmydocs-proxy
+#   ...attach the other project's Caddy to it and add a site block for this domain.
+#
+# Usage: add this file after compose.prod.yaml in every command:
+#   docker compose -f compose.prod.yaml -f compose.shared.yaml --env-file .env.production up -d
+
+services:
+  web:
+    # Does not publish any port: the other project's Caddy is the only way in.
+    ports: !reset []
+    environment:
+      # Plain HTTP inside Docker; the front Caddy handles HTTPS.
+      SITE_ADDRESS: ":80"
+      # Only the front Caddy may set the visitor's address and the scheme.
+      TRUSTED_PROXIES: ${PROXY_SUBNET:-10.250.250.0/24}
+    networks:
+      edge: {}
+      proxy:
+        # Stable name for the front Caddy's site block: reverse_proxy askmydocs-web:80
+        aliases: [askmydocs-web]
+
+  app:
+    environment:
+      # Requests reach PHP-FPM from the front Caddy's address; Laravel takes the visitor's
+      # address and HTTPS from it (config/trustedproxy.php), and from nobody else.
+      TRUSTED_PROXIES: ${PROXY_SUBNET:-10.250.250.0/24}
+
+networks:
+  proxy:
+    external: true
+    name: askmydocs-proxy

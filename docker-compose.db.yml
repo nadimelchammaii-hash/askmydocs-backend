@@ -1,0 +1,39 @@
+# Database-only container for LOCAL DEVELOPMENT (Phases 1-8).
+#
+# Laravel and the Vue SPA run natively on Windows; only PostgreSQL + pgvector runs here.
+# This is NOT the full-stack setup - that is introduced in Phase 9.
+#
+# Credentials come from this directory's .env (the same file Laravel reads).
+# Usage: see "Local database" in README.md.
+
+name: askmydocs
+
+services:
+  db:
+    # Pinned pgvector release on PostgreSQL 18 so rebuilds are reproducible.
+    image: pgvector/pgvector:0.8.7-pg18
+    container_name: askmydocs-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:?Set DB_DATABASE in .env}
+      POSTGRES_USER: ${DB_USERNAME:?Set DB_USERNAME in .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    ports:
+      # Bound to localhost only, so the database is not reachable from the network.
+      # 5432 on the host is used by the native PostgreSQL service, hence 5433.
+      - "127.0.0.1:${DB_HOST_PORT:-5433}:5432"
+    volumes:
+      # PostgreSQL 18 images store data under /var/lib/postgresql/18/docker,
+      # so the volume is mounted at /var/lib/postgresql (not .../data as in older images).
+      - askmydocs_pgdata:/var/lib/postgresql
+      # Runs once, only when the volume is empty (first start).
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  askmydocs_pgdata:
+    name: askmydocs_pgdata
