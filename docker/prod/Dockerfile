@@ -7,7 +7,7 @@
 FROM composer:2.10.2 AS composer
 
 # --- PHP with the extensions the app needs ---------------------------------------
-FROM php:8.4.25-fpm-bookworm AS php
+FROM php:8.5.11-fpm-bookworm AS php
 
 # poppler-utils: pdftotext/pdfinfo for PDF text extraction.
 # The -dev packages are only needed to compile the extensions and are removed afterwards;
