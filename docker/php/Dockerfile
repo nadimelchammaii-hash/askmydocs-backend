@@ -4,7 +4,7 @@
 
 FROM composer:2.10.2 AS composer
 
-FROM php:8.4.25-cli-bookworm
+FROM php:8.5.11-cli-bookworm
 
 # poppler-utils: pdftotext/pdfinfo for PDF text extraction.
 # libpq/libicu/libzip: build dependencies of the PHP extensions below.
