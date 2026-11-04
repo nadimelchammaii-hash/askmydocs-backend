@@ -88,8 +88,9 @@ it('searches several documents at once', function () {
 });
 
 it('finds a small document\'s chunks even when many other chunks are closer', function () {
-    // Without pgvector's iterative scan, the HNSW index returns only the ~40 nearest
-    // chunks overall (all from the big document); filtering them leaves nothing.
+    // The approximate HNSW index walks a graph that, here, is crowded with the big
+    // document's chunks: it used to miss some of the small document's chunks at random.
+    // The exact search finds them every time.
     $small = Document::factory()->ready()->create();
     $big = Document::factory()->ready()->create();
     chunksFor($big, array_map(fn (int $i) => [1, "Close chunk {$i}.", [1, 0.01 * ($i % 7), 0.01 * ($i % 11)]], range(0, 299)));
@@ -103,6 +104,31 @@ it('finds a small document\'s chunks even when many other chunks are closer', fu
     $results = retriever()->search([$small->id], QUESTION, limit: 3);
 
     expect(array_map(fn (RetrievedChunk $r) => $r->pageNumber, $results))->toEqualCanonicalizing([5, 6, 7]);
+});
+
+it('compares every chunk instead of using the approximate index', function () {
+    $document = Document::factory()->ready()->create();
+    chunksFor($document, [[1, 'Anything.', [1]]]);
+    $hnswIndex = DB::table('pg_indexes')
+        ->where('tablename', 'document_chunks')
+        ->where('indexdef', 'like', '%USING hnsw%')
+        ->value('indexname');
+
+    // Make PostgreSQL prefer any index, as it would on a large table.
+    DB::statement('set local enable_seqscan = off');
+    DB::statement('set local enable_sort = off');
+
+    DB::enableQueryLog();
+    retriever()->search([$document->id], QUESTION);
+    $search = collect(DB::getQueryLog())->last();
+
+    $plan = collect(DB::select('explain '.$search['query'], $search['bindings']))
+        ->pluck('QUERY PLAN')
+        ->implode('
+');
+
+    expect($hnswIndex)->not->toBeNull()
+        ->and($plan)->not->toContain($hnswIndex);
 });
 
 it('embeds only the question, as plain text', function () {

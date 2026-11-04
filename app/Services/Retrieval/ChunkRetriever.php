@@ -11,14 +11,15 @@ use InvalidArgumentException;
 /**
  * Finds the chunks most relevant to a question (semantic search).
  *
- * The question is embedded with the same model as the chunks, and chunks are
- * ranked by cosine distance using the HNSW index.
+ * The question is embedded with the same model as the chunks, and the chunks of
+ * the given documents are ranked by cosine distance.
  *
- * Filtering pitfall: HNSW first finds the nearest chunks across ALL documents
- * (40 by default) and filters by document afterwards. When other documents'
- * chunks are closer, a filtered search could return too few or no results.
- * pgvector 0.8's iterative scan keeps scanning until enough rows pass the
- * filter; it is enabled for this query only (SET LOCAL inside a transaction).
+ * The search is EXACT: every chunk of the given documents is compared. The HNSW
+ * index is approximate: it walks a graph of chunks across all documents and can
+ * miss poorly connected ones, so a filtered search sometimes returned fewer
+ * chunks than exist (or none), at random. A search always covers a few known
+ * documents (a few thousand chunks at most), so comparing them all takes
+ * milliseconds and never misses a page.
  */
 class ChunkRetriever
 {
@@ -50,22 +51,24 @@ class ChunkRetriever
 
         $vector = $this->embeddings->embed([$question])->vectors[0];
 
-        $rows = DB::transaction(function () use ($documentIds, $vector, $limit) {
-            // relaxed_order gives the best recall; exact order is restored below.
-            DB::statement('set local hnsw.iterative_scan = relaxed_order');
+        // The chunks of these documents (found through the document_id index) with their
+        // distance. OFFSET 0 keeps PostgreSQL from merging this into the outer query, where
+        // "order by distance" would let it use the approximate HNSW index instead.
+        $candidates = DocumentChunk::query()
+            ->select(['id', 'document_id', 'chunk_index', 'page_number', 'content'])
+            ->selectVectorDistance('embedding', $vector, as: 'distance')
+            ->whereIn('document_id', $documentIds)
+            ->offset(0)
+            ->toBase();
 
-            return DocumentChunk::query()
-                ->select(['id', 'document_id', 'chunk_index', 'page_number', 'content'])
-                ->selectVectorDistance('embedding', $vector, as: 'distance')
-                ->whereIn('document_id', $documentIds)
-                ->orderByVectorDistance('embedding', $vector)
-                ->limit($limit)
-                ->toBase()
-                ->get();
-        });
+        $rows = DB::query()
+            ->fromSub($candidates, 'candidates')
+            ->orderBy('distance')
+            ->orderBy('id') // equal distances: always the same order
+            ->limit($limit)
+            ->get();
 
         return $rows
-            ->sortBy('distance')
             ->map(fn (object $row) => new RetrievedChunk(
                 chunkId: (int) $row->id,
                 documentId: $row->document_id,
