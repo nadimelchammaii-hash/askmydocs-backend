@@ -11,8 +11,9 @@
 #
 # - The SPA repository must be next to this one: ../askmydocs-frontend
 # - Only Caddy is reachable (ports 80/443). The database has no published port.
-# - Mailpit is a local test inbox (http://localhost:8025). On a server, remove it and set
-#   the MAIL_* values of a real SMTP provider.
+# - Mailpit is a local test inbox (http://localhost:8025), started only with
+#   COMPOSE_PROFILES=mailpit. On a server, remove that line and set a real SMTP provider.
+# - Backups: docker/prod/backup.sh and restore.sh.
 # - Separate project name and volumes, so it can run next to the development stack.
 
 name: askmydocs-prod
@@ -110,8 +111,10 @@ services:
       retries: 10
 
   # LOCAL TEST ONLY: catches every email. Web inbox at http://localhost:8025.
+  # Starts only with COMPOSE_PROFILES=mailpit (set in .env.production for local tests).
   mailpit:
     image: axllent/mailpit:v1.31.6
+    profiles: [mailpit]
     restart: unless-stopped
     ports:
       - "127.0.0.1:8025:8025"

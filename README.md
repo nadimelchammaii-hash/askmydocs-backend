@@ -4,7 +4,7 @@ Laravel REST API for AskMyDocs: upload PDF documents and ask questions about the
 
 The UI is a separate application in its own repository: **askmydocs-frontend** (Vue 3 + Vuetify). The API contract shared by both is documented in [`docs/api.md`](docs/api.md).
 
-> Status: Phase 5 complete (documents, cited answers, conversation and document management). Next: Phase 6, UI design (Google Stitch).
+> Status: feature-complete (documents, cited answers, conversations, the Vue UI), hardened (rate limits, security headers, stalled-work recovery) and packaged for production (Docker images, Caddy with HTTPS, backups).
 
 ## Stack
 
@@ -52,7 +52,72 @@ How it is set up:
 - **Linux has `pcntl`**, so job timeouts (extraction 120 s, embedding 240 s) are enforced by the workers.
 - Uploaded PDFs are stored in `storage/app/private` on the host, as before.
 
-This is a development setup (dev servers, mounted code). Production images are prepared in Phase 9.
+This is a development setup (dev servers, mounted code). For production, see the next section.
+
+## Production (Docker)
+
+[`compose.prod.yaml`](compose.prod.yaml) runs the production stack. It is a separate Compose project (`askmydocs-prod`, its own volumes), so it can run next to the development stack. The code is built into images; nothing is mounted from the host.
+
+| Service | What it runs |
+|---|---|
+| `web` | Caddy: HTTPS (automatic certificates), the built SPA, and `/api`, `/sanctum`, `/up` passed to PHP-FPM. Image built from `../askmydocs-frontend` (`docker/Dockerfile.prod`, `docker/Caddyfile`) |
+| `app` | PHP-FPM with Laravel ([`docker/prod/Dockerfile`](docker/prod/Dockerfile)), no development packages, OPcache on |
+| `worker-answers`, `worker-documents` | `queue:work`, same image, restarted every hour |
+| `scheduler` | `schedule:work` (stalled-work check, cleanups) |
+| `db` | PostgreSQL 18 + pgvector, **no published port** |
+| `mailpit` | Local test inbox at <http://localhost:8025>, only with `COMPOSE_PROFILES=mailpit` |
+
+The SPA and the API share one address, so the browser makes no cross-site requests. Caddy can only reach PHP-FPM; only the PHP containers can reach the database. PHP-FPM receives the visitor's IP address and HTTPS directly over FastCGI, so no proxy headers are trusted.
+
+### First deployment (local test at https://localhost)
+
+```sh
+cp .env.production.example .env.production
+# Fill in APP_KEY, DB_PASSWORD (and OPENAI_API_KEY to index documents) - see the file's comments.
+
+docker compose -f compose.prod.yaml --env-file .env.production build
+docker compose -f compose.prod.yaml --env-file .env.production run --rm app php artisan migrate --force
+docker compose -f compose.prod.yaml --env-file .env.production up -d
+```
+
+Migrate before `up`: the workers need the database tables. Configuration, routes and views are cached when each container starts, so a changed `.env.production` only needs `up -d` (which recreates the containers).
+
+For `localhost`, Caddy signs the certificate with its own local certificate authority, so the browser shows a warning once ("Advanced, Continue"). HSTS is set to `max-age=0` locally, so the browser does not remember HTTPS-only for `localhost`.
+
+### Updating
+
+```sh
+docker compose -f compose.prod.yaml --env-file .env.production build
+sh docker/prod/backup.sh
+docker compose -f compose.prod.yaml --env-file .env.production run --rm app php artisan migrate --force
+docker compose -f compose.prod.yaml --env-file .env.production up -d
+```
+
+### Moving to a real domain
+
+1. Point the domain's DNS (A/AAAA record) to the server and open ports 80 and 443.
+2. In `.env.production`: `SITE_ADDRESS=askmydocs.example.com`, `WEB_BIND=0.0.0.0`, and `APP_URL`, `FRONTEND_URL` (`https://askmydocs.example.com`) and `SANCTUM_STATEFUL_DOMAINS` (`askmydocs.example.com`). Caddy then gets a Let's Encrypt certificate on its own.
+3. Once HTTPS works, delete the `HSTS` line (the default is one year).
+4. Email: delete `COMPOSE_PROFILES=mailpit` and set the SMTP values of a provider (Postmark, Mailgun, Amazon SES, Brevo...): `MAIL_HOST`, `MAIL_PORT=587`, `MAIL_USERNAME`, `MAIL_PASSWORD` and a `MAIL_FROM_ADDRESS` on a domain verified with the provider (SPF/DKIM), or password-reset emails will land in spam.
+
+### Backups
+
+[`docker/prod/backup.sh`](docker/prod/backup.sh) saves the database (`pg_dump`, custom format) and the uploaded PDFs to `backups/` (ignored by Git). [`docker/prod/restore.sh`](docker/prod/restore.sh) puts a backup back, replacing the current data; it stops the web server, workers and scheduler meanwhile and requires `--yes`.
+
+```sh
+sh docker/prod/backup.sh                                           # -> backups/askmydocs-<time>.dump and .files.tgz
+sh docker/prod/restore.sh backups/askmydocs-<time>.dump --yes
+```
+
+Run backups on a schedule (e.g. cron, daily) and keep a copy off the server. Backups contain user documents and password hashes: keep them private. In Git Bash on Windows, run `export MSYS_NO_PATHCONV=1` first, so container paths are not converted to Windows paths.
+
+### Logs
+
+Everything logs to the container output (`LOG_CHANNEL=stderr`, level `warning`):
+
+```sh
+docker compose -f compose.prod.yaml --env-file .env.production logs -f app worker-documents
+```
 
 ## Alternative: native development (Windows)
 
@@ -268,4 +333,5 @@ Note the absolute scores: with these models, relevant matches often score 0.3–
 - Document text is sent to OpenAI to create embeddings (and, from Phase 4, answers).
 - Tests never call OpenAI: every outgoing HTTP request in tests must be faked, or the test fails.
 - Logs contain document IDs, error reasons and token counts, never document text or the API key.
-- The database port is bound to `127.0.0.1` only.
+- The database port is bound to `127.0.0.1` only in development, and not published at all in production.
+- Production: `APP_DEBUG=false`, HTTPS-only encrypted session cookies, security headers on every response, rate limits on all API routes. `.env.production` is not committed and not copied into images.

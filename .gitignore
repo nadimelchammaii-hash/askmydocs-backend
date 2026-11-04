@@ -32,3 +32,5 @@ Thumbs.db
 .claude/skills/
 CLAUDE.md
 
+# Production backups (docker/prod/backup.sh): user data, never commit
+/backups
