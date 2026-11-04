@@ -1,0 +1,59 @@
+# Files that must never be copied into a Docker image (docker/prod/Dockerfile).
+
+# Secrets and local settings
+.env
+.env.*
+!.env.example
+auth.json
+
+# Version control, editors, tooling
+.git
+.gitattributes
+.github
+.idea
+.vscode
+.claude
+.mcp.json
+.phpunit.cache
+.phpunit.result.cache
+boost.json
+CLAUDE.md
+
+# Installed in the image itself
+vendor
+node_modules
+
+# Local data: uploaded PDFs, logs, caches (the folders themselves are kept)
+storage/app/*
+!storage/app/.gitignore
+!storage/app/private
+storage/app/private/*
+!storage/app/private/.gitignore
+!storage/app/public
+storage/app/public/*
+!storage/app/public/.gitignore
+storage/logs/*
+!storage/logs/.gitignore
+storage/framework/cache/*
+!storage/framework/cache/.gitignore
+!storage/framework/cache/data
+storage/framework/cache/data/*
+!storage/framework/cache/data/.gitignore
+!storage/framework/cache/locks
+storage/framework/cache/locks/*
+!storage/framework/cache/locks/.gitignore
+storage/framework/sessions/*
+!storage/framework/sessions/.gitignore
+storage/framework/views/*
+!storage/framework/views/.gitignore
+storage/framework/testing
+bootstrap/cache/*.php
+
+# Not needed at run time
+tests
+docs
+phpunit.xml
+compose*.yaml
+docker-compose*.yml
+docker/php
+README.md
