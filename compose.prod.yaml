@@ -1,0 +1,130 @@
+# PRODUCTION stack: Caddy (HTTPS + the built SPA), PHP-FPM, queue workers, scheduler and
+# PostgreSQL. Code is baked into the images (nothing is mounted from the host).
+#
+# Settings come from .env.production (copy .env.production.example; never commit it):
+#
+#   docker compose -f compose.prod.yaml --env-file .env.production build
+#   docker compose -f compose.prod.yaml --env-file .env.production run --rm app php artisan migrate --force
+#   docker compose -f compose.prod.yaml --env-file .env.production up -d
+#
+# Migrate before `up`: the workers need the database tables (they restart until then).
+#
+# - The SPA repository must be next to this one: ../askmydocs-frontend
+# - Only Caddy is reachable (ports 80/443). The database has no published port.
+# - Mailpit is a local test inbox (http://localhost:8025). On a server, remove it and set
+#   the MAIL_* values of a real SMTP provider.
+# - Separate project name and volumes, so it can run next to the development stack.
+
+name: askmydocs-prod
+
+# Shared by the API, workers and scheduler. Only `app` builds the image; the others reuse it.
+x-php: &php
+  image: askmydocs-api:prod
+  pull_policy: never
+  restart: unless-stopped
+  # Laravel reads its settings from these environment variables (there is no .env file
+  # in the image). They are cached at start (`php artisan optimize` in the entrypoint).
+  env_file: .env.production
+  environment:
+    DB_HOST: db
+    DB_PORT: 5432
+  volumes:
+    # Uploaded PDFs: written by `app`, read by the document worker.
+    - storage:/app/storage
+  networks: [backend]
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  web:
+    build:
+      context: ../askmydocs-frontend
+      dockerfile: docker/Dockerfile.prod
+    image: askmydocs-web:prod
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?Set SITE_ADDRESS in .env.production}
+      HSTS: ${HSTS:-max-age=31536000}
+      PHP_UPSTREAM: app:9000
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:80:80"
+      - "${WEB_BIND:-127.0.0.1}:443:443"
+      # HTTP/3 (QUIC), which Caddy offers to browsers.
+      - "${WEB_BIND:-127.0.0.1}:443:443/udp"
+    volumes:
+      # Certificates (and, for localhost, Caddy's own certificate authority). Kept so the
+      # certificate does not change on every restart.
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [edge]
+    depends_on:
+      app:
+        condition: service_healthy
+
+  app:
+    <<: *php
+    build:
+      context: .
+      dockerfile: docker/prod/Dockerfile
+    pull_policy: missing
+    networks: [edge, backend]
+    healthcheck:
+      # PHP-FPM accepts connections on port 9000.
+      test: ["CMD", "php", "-r", "exit(@fsockopen('127.0.0.1', 9000) ? 0 : 1);"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # --max-time: restart the worker every hour (frees memory, picks up a new image).
+  worker-answers:
+    <<: *php
+    command: ["php", "artisan", "queue:work", "--queue=answers", "--tries=3", "--max-time=3600"]
+    stop_grace_period: 90s
+
+  worker-documents:
+    <<: *php
+    command: ["php", "artisan", "queue:work", "--queue=documents", "--tries=3", "--max-time=3600"]
+    # Lets a running document job (up to 240 s) finish when the stack stops.
+    stop_grace_period: 260s
+
+  scheduler:
+    <<: *php
+    command: ["php", "artisan", "schedule:work"]
+
+  db:
+    image: pgvector/pgvector:0.8.7-pg18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:?Set DB_DATABASE in .env.production}
+      POSTGRES_USER: ${DB_USERNAME:?Set DB_USERNAME in .env.production}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env.production}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # LOCAL TEST ONLY: catches every email. Web inbox at http://localhost:8025.
+  mailpit:
+    image: axllent/mailpit:v1.31.6
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"
+    networks: [backend]
+
+# edge: Caddy <-> PHP-FPM only. backend: PHP <-> database and mail. Caddy cannot reach
+# the database.
+networks:
+  edge:
+  backend:
+
+volumes:
+  pgdata:
+  storage:
+  caddy_data:
+  caddy_config:
