@@ -7,6 +7,9 @@
 #   docker compose -f compose.prod.yaml --env-file .env.production run --rm app php artisan migrate --force
 #   docker compose -f compose.prod.yaml --env-file .env.production up -d
 #
+# With images published by CI (API_IMAGE/WEB_IMAGE in .env.production), use `pull`
+# instead of `build`; the source of the frontend is then not needed.
+#
 # Migrate before `up`: the workers need the database tables (they restart until then).
 #
 # - The SPA repository must be next to this one: ../askmydocs-frontend
@@ -20,7 +23,9 @@ name: askmydocs-prod
 
 # Shared by the API, workers and scheduler. Only `app` builds the image; the others reuse it.
 x-php: &php
-  image: askmydocs-api:prod
+  # API_IMAGE: an image published by CI (e.g. ghcr.io/<owner>/askmydocs-api:<commit>);
+  # default: the image built locally from this repository.
+  image: ${API_IMAGE:-askmydocs-api:prod}
   pull_policy: never
   restart: unless-stopped
   # Laravel reads its settings from these environment variables (there is no .env file
@@ -42,7 +47,8 @@ services:
     build:
       context: ../askmydocs-frontend
       dockerfile: docker/Dockerfile.prod
-    image: askmydocs-web:prod
+    # WEB_IMAGE: an image published by the frontend's CI; default: built locally.
+    image: ${WEB_IMAGE:-askmydocs-web:prod}
     restart: unless-stopped
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:?Set SITE_ADDRESS in .env.production}

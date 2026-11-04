@@ -93,6 +93,18 @@ docker compose -f compose.prod.yaml --env-file .env.production run --rm app php 
 docker compose -f compose.prod.yaml --env-file .env.production up -d
 ```
 
+### Using the images built by CI
+
+On every push to `main`, CI publishes `ghcr.io/<owner>/askmydocs-api` and `ghcr.io/<owner>/askmydocs-web`, tagged with the full commit SHA and `latest` (see "Continuous integration"). A server then needs only `compose.prod.yaml`, `.env.production` and the backup scripts, not the source code:
+
+```sh
+# .env.production
+API_IMAGE=ghcr.io/<owner>/askmydocs-api:<commit-sha>
+WEB_IMAGE=ghcr.io/<owner>/askmydocs-web:<commit-sha>
+```
+
+Replace `build` with `docker compose -f compose.prod.yaml --env-file .env.production pull` in the steps above. Use commit tags rather than `latest`, so a deployment is always an exact, known version; to roll back, set the previous tag and run `up -d`. Packages of a private repository are private: log in once on the server with `docker login ghcr.io` and a token that has only the `read:packages` permission.
+
 ### Moving to a real domain
 
 1. Point the domain's DNS (A/AAAA record) to the server and open ports 80 and 443.
@@ -217,6 +229,19 @@ php artisan documents:search <document-id> "What is the refund policy?" --limit=
 ```
 
 Shows which chunks a question retrieves from a ready document, with page and similarity. It embeds the question through OpenAI, so it needs `OPENAI_API_KEY` and costs a tiny amount per run.
+
+## Continuous integration
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and pull request (GitHub Actions):
+
+1. Tests (`php artisan test`) against a fresh PostgreSQL + pgvector database, with Poppler installed. No secrets are needed: the tests fake every OpenAI call.
+2. Code style (`pint --test`).
+3. Security advisories of the production packages (`composer audit --no-dev`).
+4. On `main` only, after the checks pass: builds the production image and pushes it to the GitHub Container Registry.
+
+Actions are pinned to commit SHAs. [`.github/dependabot.yml`](.github/dependabot.yml) proposes weekly updates for Composer, the Docker images and the Actions, only for versions at least 14 days old; CI tests each one.
+
+Recommended repository setting: protect `main` so pull requests need the "Tests and code style" check to pass. The image job grants itself the permission to publish packages (`packages: write`); every other job can only read the repository.
 
 ## Local database
 
