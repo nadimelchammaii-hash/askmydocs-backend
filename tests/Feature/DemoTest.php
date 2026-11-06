@@ -103,8 +103,11 @@ describe('starting a demo', function () {
         expect(collect($this->getJson('/api/v1/documents')->json('data'))->pluck('title')->all())->toBe(['Sample 1']);
     });
 
-    it('is unavailable without prepared samples', function () {
-        startDemo()->assertServiceUnavailable()->assertJsonPath('code', 'demo_unavailable');
+    it('is unavailable without prepared samples, with a message for the visitor', function () {
+        startDemo()->assertServiceUnavailable()->assertExactJson([
+            'message' => 'The demo is not available right now. Please try again later.',
+            'code' => 'demo_unavailable',
+        ]);
 
         expect(User::count())->toBe(0);
         $this->assertGuest();
@@ -135,7 +138,10 @@ describe('starting a demo', function () {
 
         startDemo()->assertCreated();
         $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.9']);
-        startDemo()->assertServiceUnavailable()->assertJsonPath('code', 'demo_unavailable');
+        startDemo()->assertServiceUnavailable()->assertExactJson([
+            'message' => 'The demo is very busy today. Please try again tomorrow.',
+            'code' => 'demo_unavailable',
+        ]);
     });
 });
 

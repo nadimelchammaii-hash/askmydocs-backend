@@ -59,7 +59,9 @@ class ApiErrorFormatter
     private function message(int $status, array $data): string
     {
         return match (true) {
-            $status >= 500 => 'Server error.',
+            // Server errors keep a generic message, except the intended ones that carry a
+            // specific code (e.g. 503 demo_unavailable): their message is written for users.
+            $status >= 500 && ! isset($data['code']) => 'Server error.',
             $status === 404 => 'Resource not found.',
             default => (string) ($data['message'] ?? 'Request failed.'),
         };
