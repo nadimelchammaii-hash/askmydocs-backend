@@ -2,11 +2,13 @@
 
 namespace App\Http\Requests\Documents;
 
+use App\Exceptions\ApiException;
 use App\Services\Pdf\PdfExtractionException;
 use App\Services\Pdf\PdfTextExtractor;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Validator;
 use LogicException;
 
@@ -21,6 +23,22 @@ use LogicException;
 class StoreDocumentRequest extends FormRequest
 {
     private ?int $pageCount = null;
+
+    /**
+     * Demo accounts may upload only a few PDFs of their own (config demo.max_uploads).
+     * Checked before validation, so a refused upload never reaches pdfinfo.
+     */
+    public function authorize(): bool
+    {
+        $user = $this->user();
+        $max = (int) config('demo.max_uploads');
+
+        if ($user?->isDemo() && $user->documents()->where('is_sample', false)->count() >= $max) {
+            throw new ApiException(403, 'demo_upload_limit', "Demo accounts can upload {$max} ".Str::plural('PDF', $max).' of their own. Create your own account to upload more.');
+        }
+
+        return true;
+    }
 
     /**
      * @return array<string, mixed>

@@ -13,6 +13,8 @@ it('returns the authenticated user without sensitive fields', function () {
             'name' => $user->name,
             'email' => $user->email,
             'created_at' => $user->created_at->toIso8601String(),
+            'is_demo' => false,
+            'demo_expires_at' => null,
         ]]);
 });
 

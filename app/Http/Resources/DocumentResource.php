@@ -28,6 +28,8 @@ class DocumentResource extends JsonResource
             'is_finished' => $this->status->isFinished(),
             'error_code' => $this->error_code,
             'error_message' => $this->error_message,
+            // A demo sample: cannot be renamed or deleted.
+            'is_sample' => (bool) $this->is_sample,
             'created_at' => $this->created_at?->toIso8601String(),
             'processed_at' => $this->processed_at?->toIso8601String(),
             'conversations_count' => $this->whenCounted('conversations'),

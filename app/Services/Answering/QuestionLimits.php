@@ -23,11 +23,11 @@ final class QuestionLimits
     /**
      * @return list<Limit>
      */
-    public static function for(string $requester): array
+    public static function for(string $requester, int $perDay): array
     {
         return [
             Limit::perMinute(config('answers.questions_per_minute'))->by('minute:'.$requester),
-            Limit::perDay(config('answers.questions_per_day'))->by(self::dayKey($requester))->response(fn () => response()->json([
+            Limit::perDay($perDay)->by(self::dayKey($requester))->response(fn () => response()->json([
                 'message' => 'You have reached today\'s question limit. Please try again tomorrow.',
                 'code' => 'daily_limit_reached',
             ], 429)),
@@ -42,9 +42,10 @@ final class QuestionLimits
         return RateLimiter::attempts(md5(self::LIMITER.self::dayKey((string) $user->id)));
     }
 
-    public static function perDay(): int
+    /** Daily question limit of this user (demo accounts have their own, smaller one). */
+    public static function perDay(?User $user): int
     {
-        return (int) config('answers.questions_per_day');
+        return (int) ($user?->isDemo() ? config('demo.questions_per_day') : config('answers.questions_per_day'));
     }
 
     /** When today's count starts again from zero. */

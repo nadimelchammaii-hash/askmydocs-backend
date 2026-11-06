@@ -24,6 +24,9 @@ class UserResource extends JsonResource
             'name' => $this->name,
             'email' => $this->email,
             'created_at' => $this->created_at?->toIso8601String(),
+            // "Try the demo" accounts: the SPA shows a banner and hides account settings.
+            'is_demo' => $this->isDemo(),
+            'demo_expires_at' => $this->demo_expires_at?->toIso8601String(),
         ];
     }
 }

@@ -20,12 +20,12 @@ class DocumentPolicy
     /** Rename the document. */
     public function update(User $user, Document $document): Response
     {
-        return $this->ownerOnly($user, $document);
+        return $this->ownerAndNotSample($user, $document);
     }
 
     public function delete(User $user, Document $document): Response
     {
-        return $this->ownerOnly($user, $document);
+        return $this->ownerAndNotSample($user, $document);
     }
 
     /**
@@ -39,5 +39,20 @@ class DocumentPolicy
     private function ownerOnly(User $user, Document $document): Response
     {
         return $document->isOwnedBy($user) ? Response::allow() : Response::denyAsNotFound();
+    }
+
+    /**
+     * Demo samples stay as they are: their owner may view them and ask questions,
+     * but not rename or delete them. Other users still get 404.
+     */
+    private function ownerAndNotSample(User $user, Document $document): Response
+    {
+        $owner = $this->ownerOnly($user, $document);
+
+        if ($owner->denied() || ! $document->is_sample) {
+            return $owner;
+        }
+
+        return Response::deny('Sample documents in the demo cannot be renamed or deleted.');
     }
 }

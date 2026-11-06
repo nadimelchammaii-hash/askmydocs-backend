@@ -28,7 +28,20 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'demo_expires_at' => 'datetime',
         ];
+    }
+
+    /** A temporary "Try the demo" account (deleted by demo:prune once expired). */
+    public function isDemo(): bool
+    {
+        return $this->demo_expires_at !== null;
+    }
+
+    /** The hidden account that owns the prepared demo samples (config demo.template_email). */
+    public function isDemoTemplate(): bool
+    {
+        return $this->email === config('demo.template_email');
     }
 
     /**

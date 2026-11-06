@@ -20,7 +20,11 @@ class PasswordResetController extends Controller
      */
     public function sendLink(ForgotPasswordRequest $request): JsonResponse
     {
-        Password::sendResetLink($request->only('email'));
+        // Demo and demo-template accounts use ".invalid" addresses, which can never
+        // receive email: sending would only produce bounces at the mail provider.
+        if (! Str::endsWith(Str::lower((string) $request->validated('email')), '.invalid')) {
+            Password::sendResetLink($request->only('email'));
+        }
 
         return response()->json([
             'message' => 'If an account exists for this email address, a password reset link has been sent.',

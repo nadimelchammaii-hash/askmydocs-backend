@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth\DemoController;
 use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Auth\SessionController;
@@ -7,6 +8,7 @@ use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StatsController;
+use App\Http\Middleware\RejectDemoAccounts;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -22,6 +24,7 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('auth')->name('auth.')->group(function () {
     Route::post('register', RegisterController::class)->middleware('throttle:6,1')->name('register');
     Route::post('login', [SessionController::class, 'store'])->middleware('throttle:login')->name('login');
+    Route::post('demo', DemoController::class)->middleware('throttle:demo')->name('demo');
     Route::post('logout', [SessionController::class, 'destroy'])->middleware('auth:sanctum')->name('logout');
 
     Route::post('forgot-password', [PasswordResetController::class, 'sendLink'])->middleware('throttle:6,1')->name('password.email');
@@ -30,8 +33,8 @@ Route::prefix('auth')->name('auth.')->group(function () {
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('user', [ProfileController::class, 'show'])->name('user.show');
-    Route::patch('user', [ProfileController::class, 'update'])->name('user.update');
-    Route::put('user/password', [ProfileController::class, 'updatePassword'])->name('user.password');
+    Route::patch('user', [ProfileController::class, 'update'])->middleware(RejectDemoAccounts::class)->name('user.update');
+    Route::put('user/password', [ProfileController::class, 'updatePassword'])->middleware(RejectDemoAccounts::class)->name('user.password');
 
     Route::get('stats', StatsController::class)->name('stats');
 

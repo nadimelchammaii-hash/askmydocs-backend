@@ -104,9 +104,25 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(5)->by(Str::lower((string) $request->input('email')).'|'.$request->ip());
         });
 
-        // Every question can cost an OpenAI call: limit bursts and daily volume per user.
+        // Every question can cost an OpenAI call: limit bursts and daily volume per user
+        // (demo accounts have a smaller daily limit).
         RateLimiter::for(QuestionLimits::LIMITER, function (Request $request): array {
-            return QuestionLimits::for((string) $request->user()?->id ?: (string) $request->ip());
+            return QuestionLimits::for(
+                (string) $request->user()?->id ?: (string) $request->ip(),
+                QuestionLimits::perDay($request->user()),
+            );
+        });
+
+        // "Try the demo": a few new demos per visitor per hour, and a cap for the whole
+        // site per day, so scripted clicks cannot fill the database.
+        RateLimiter::for('demo', function (Request $request): array {
+            return [
+                Limit::perHour(config('demo.starts_per_hour'))->by('ip:'.$request->ip()),
+                Limit::perDay(config('demo.starts_per_day'))->by('site')->response(fn () => response()->json([
+                    'message' => 'The demo is very busy today. Please try again tomorrow.',
+                    'code' => 'demo_unavailable',
+                ], 503)),
+            ];
         });
 
         // Each upload stores up to 20 MB and runs pdfinfo, so uploads are limited per user.

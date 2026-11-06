@@ -28,7 +28,7 @@ class StatsController extends Controller
         $ready = $count(DocumentStatus::Ready);
         $failed = $count(DocumentStatus::Failed);
 
-        $limit = QuestionLimits::perDay();
+        $limit = QuestionLimits::perDay($user);
         $used = min(QuestionLimits::usedToday($user), $limit);
 
         return response()->json(['data' => [

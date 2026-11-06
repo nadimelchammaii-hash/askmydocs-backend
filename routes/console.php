@@ -11,6 +11,9 @@ Artisan::command('inspire', function () {
 // Runs when the scheduler runs: `php artisan schedule:work` locally, cron + `schedule:run` in production.
 Schedule::command('documents:prune-orphans')->hourly()->withoutOverlapping();
 
+// Demo accounts ("Try the demo") whose time is up, with their documents and files.
+Schedule::command('demo:prune')->hourly()->withoutOverlapping();
+
 // Answers and documents that will not finish on their own (e.g. no worker running).
 Schedule::command('work:fail-stalled')->everyFiveMinutes()->withoutOverlapping();
 

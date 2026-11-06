@@ -55,7 +55,9 @@ Every API error has the same shape:
 | Status | `code` | Meaning / client action |
 |---|---|---|
 | 401 | `unauthenticated` | No valid session → treat as logged out |
-| 403 | `forbidden` | Authenticated but not allowed |
+| 403 | `forbidden` | Authenticated but not allowed (e.g. renaming or deleting a demo sample) |
+| 403 | `demo_account` | Demo accounts cannot change account settings |
+| 403 | `demo_upload_limit` | A demo account has used its uploads |
 | 404 | `not_found` | Resource does not exist **or belongs to another user** (see Ownership) |
 | 409 | `conflict`, or a specific code | The action does not fit the current state. Specific codes: `document_not_ready`, `answer_pending`, `answer_not_failed` |
 | 413 | `payload_too_large` | Request body above the server's limit (normally caught earlier as a 422 on `file`) |
@@ -63,6 +65,7 @@ Every API error has the same shape:
 | 422 | `validation_failed` | Show `errors` next to form fields |
 | 429 | `too_many_requests` | Rate limited; `Retry-After` header gives seconds to wait. Every route allows 300 requests per minute per user (per IP for guests); some routes have stricter limits |
 | 429 | `daily_limit_reached` | Daily question limit reached; try again tomorrow |
+| 503 | `demo_unavailable` | The demo is off, not prepared, or at its daily limit; try again later |
 | 500 | `server_error` | Generic message only; details are in the server log |
 
 Clients should branch on `code` (stable), not on `message` (wording may change).
@@ -100,6 +103,23 @@ Rate limit: 5/min per email + IP → `429` afterwards.
 
 → `200` `{ "data": User }`. → `422` with `errors.email` for invalid credentials (same message for unknown email and wrong password).
 
+### `POST /api/v1/auth/demo`
+
+"Try the demo": creates a temporary demo account holding copies of the sample documents (already processed, ready to chat) and logs the session in. No body.
+
+Rate limit: 3 per hour per IP (`429 too_many_requests`), and 200 for the whole site per day (`503 demo_unavailable`).
+
+→ `201` `{ "data": User }` with `is_demo: true` and `demo_expires_at`. → `503` `demo_unavailable` when the demo is switched off or no samples are prepared.
+
+Demo accounts:
+
+- are deleted with all their documents and conversations when `demo_expires_at` has passed (24 hours; the session then ends with `401`);
+- see their own copies only; nothing they do reaches other visitors or the samples;
+- cannot rename or delete the samples (`is_sample: true`): `403 forbidden`;
+- may upload 1 PDF of their own: `403 demo_upload_limit` afterwards;
+- cannot change name, email or password: `403 demo_account`;
+- may ask 20 questions per day (the stats endpoint reports this limit).
+
 ### `POST /api/v1/auth/logout` (authenticated)
 
 → `204`. The session is invalidated and the CSRF token rotated.
@@ -112,7 +132,7 @@ Rate limit: 6/min per IP.
 { "email": "ana@example.com" }
 ```
 
-→ `200` `{ "message": "If an account exists for this email address, a password reset link has been sent." }` — always the same response, whether or not the account exists.
+→ `200` `{ "message": "If an account exists for this email address, a password reset link has been sent." }` — always the same response, whether or not the account exists. Demo addresses (`.invalid`) never get an email.
 
 The email links to the SPA: `{FRONTEND_URL}/reset-password?token=...&email=...`. The SPA reads both query parameters and calls the endpoint below. (Locally, emails are written to `storage/logs/laravel.log`.)
 
@@ -328,6 +348,8 @@ interface User {
   name: string
   email: string
   created_at: string // ISO 8601
+  is_demo: boolean // "Try the demo" account (temporary)
+  demo_expires_at: string | null // when a demo account is deleted; null for real accounts
 }
 
 type DocumentStatus = 'queued' | 'extracting' | 'embedding' | 'ready' | 'failed'
@@ -342,6 +364,7 @@ interface Document {
   is_finished: boolean // ready or failed: stop polling
   error_code: string | null
   error_message: string | null
+  is_sample: boolean // a demo sample: cannot be renamed or deleted
   created_at: string
   processed_at: string | null
   conversations_count?: number // in lists

@@ -152,7 +152,27 @@ sh docker/prod/restore.sh backups/askmydocs-<time>.dump --yes
 
 Run backups on a schedule (e.g. cron, daily) and keep a copy off the server. Backups contain user documents and password hashes: keep them private. In Git Bash on Windows, run `export MSYS_NO_PATHCONV=1` first, so container paths are not converted to Windows paths.
 
+### Demo ("Try the demo")
+
+The login page's "Try the demo" button calls `POST /api/v1/auth/demo`, which creates a temporary demo account holding copies of the sample documents and signs the visitor in. Every visitor gets the same starting point in a private copy: the samples cannot be renamed or deleted, one PDF of their own may be uploaded, 20 questions per day, and the account with everything in it is deleted after 24 hours (`demo:prune`, hourly). Settings: [`config/demo.php`](config/demo.php).
+
+The samples are prepared once, under a hidden template account. Starting a demo copies their pages, chunks and embeddings inside the database, so it is instant and costs no OpenAI call.
+
+Preparing or changing the samples (the PDFs are not in Git; they live in the storage volume only):
+
+```sh
+# Copy the PDFs into the app container's storage (shared with the workers).
+docker compose -f compose.prod.yaml -f compose.shared.yaml --env-file .env.production exec app mkdir -p storage/app/demo-source
+docker cp "Product manual.pdf" askmydocs-prod-app-1:/app/storage/app/demo-source/
+# Import them (queued for processing like an upload; a one-time OpenAI cost), then wait until they are ready.
+docker compose -f compose.prod.yaml -f compose.shared.yaml --env-file .env.production exec app php artisan db:seed --class=DemoSeeder --force
+```
+
+Running the seeder again skips PDFs already imported and removes samples whose PDF was deleted from the folder; demos already running keep their copies. The document title comes from the file name.
+
 ### Runbook (live server: askmydocs.org)
+
+How this deployment was set up, what it changed in PulseBoard and how the two projects differ on the server: [`docs/deployment-droplet.md`](docs/deployment-droplet.md).
 
 AskMyDocs runs on the Pulseboard droplet in `~/askmydocs` (compose files, backup scripts, `.env.production`), behind Pulseboard's Caddy (`/opt/pulseboard/Caddyfile`, site blocks for `askmydocs.org` and `www`). Every command below runs in `~/askmydocs`:
 
