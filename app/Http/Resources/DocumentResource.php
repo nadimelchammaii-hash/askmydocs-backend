@@ -30,6 +30,8 @@ class DocumentResource extends JsonResource
             'error_message' => $this->error_message,
             // A demo sample: cannot be renamed or deleted.
             'is_sample' => (bool) $this->is_sample,
+            // Chat suggestions written for this document (demo samples); null: the SPA uses generic ones.
+            'suggested_questions' => $this->suggested_questions,
             'created_at' => $this->created_at?->toIso8601String(),
             'processed_at' => $this->processed_at?->toIso8601String(),
             'conversations_count' => $this->whenCounted('conversations'),

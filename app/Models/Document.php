@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable([
     'user_id', 'title', 'original_filename', 'storage_path', 'size_bytes', 'sha256', 'page_count', 'embedding_model',
     'status', 'error_code', 'error_message', 'processing_started_at', 'processed_at', 'is_sample',
+    'suggested_questions',
 ])]
 class Document extends Model
 {
@@ -32,6 +33,7 @@ class Document extends Model
             'processing_started_at' => 'datetime',
             'processed_at' => 'datetime',
             'is_sample' => 'boolean',
+            'suggested_questions' => 'array',
         ];
     }
 

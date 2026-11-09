@@ -64,6 +64,23 @@ it('skips PDFs already imported and removes samples whose PDF is gone', function
     Queue::assertPushed(ExtractDocumentText::class, 2); // the first run only
 })->skip(fn () => ! popplerAvailable(), 'Poppler (pdfinfo) is not installed');
 
+it('stores the suggested questions of each sample, and updates them on later runs', function () {
+    addSample($this->folder, 'Product manual.pdf', ['Setup']);
+    addSample($this->folder, 'CV.pdf', ['Experience']);
+    config(['demo.suggested_questions' => ['Product manual.pdf' => ['How do I set it up?']]]);
+
+    $this->seed(DemoSeeder::class);
+
+    $questions = fn () => seededTemplate()->documents()->orderBy('title')->pluck('suggested_questions', 'title')->all();
+    expect($questions())->toBe(['CV' => null, 'Product manual' => ['How do I set it up?']]);
+
+    config(['demo.suggested_questions' => ['Product manual.pdf' => ['What is in the box?'], 'CV.pdf' => ['Where has he worked?']]]);
+    $this->seed(DemoSeeder::class);
+
+    expect($questions())->toBe(['CV' => ['Where has he worked?'], 'Product manual' => ['What is in the box?']]);
+    Queue::assertPushed(ExtractDocumentText::class, 2); // not imported again
+})->skip(fn () => ! popplerAvailable(), 'Poppler (pdfinfo) is not installed');
+
 it('does nothing without a source folder', function () {
     config(['demo.source_path' => $this->folder.'/missing']);
 

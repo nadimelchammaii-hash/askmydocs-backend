@@ -26,6 +26,21 @@ return [
     // Folder the seeder imports the sample PDFs from (kept out of Git: it is on the server only).
     'source_path' => env('DEMO_SOURCE_PATH', storage_path('app/demo-source')),
 
+    // Questions the chat suggests for each sample, keyed by its file name in source_path.
+    // DemoSeeder stores them on the sample; demos copy them. Other documents get generic ones.
+    'suggested_questions' => [
+        'Nadim El Chammaii - CV.pdf' => [
+            "What is Nadim's tech stack?",
+            'Where has he worked?',
+            'What projects has he built?',
+        ],
+        'Trailhead 2 Tent - Owners Manual.pdf' => [
+            'How long does setup take?',
+            'How do I clean and store the tent?',
+            "What's included in the box?",
+        ],
+    ],
+
     'lifetime_hours' => (int) env('DEMO_LIFETIME_HOURS', 24),
 
     // PDFs a demo visitor may upload in addition to the samples.

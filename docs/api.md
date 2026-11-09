@@ -365,6 +365,7 @@ interface Document {
   error_code: string | null
   error_message: string | null
   is_sample: boolean // a demo sample: cannot be renamed or deleted
+  suggested_questions: string[] | null // chat suggestions written for this document (demo samples); null for uploads
   created_at: string
   processed_at: string | null
   conversations_count?: number // in lists

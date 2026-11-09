@@ -17,7 +17,8 @@ use Illuminate\Support\Str;
  *
  *   php artisan db:seed --class=DemoSeeder --force
  *
- * Safe to run again: PDFs already imported (same content) are skipped, and samples
+ * Safe to run again: PDFs already imported (same content) are not imported twice (only
+ * their suggested questions, config('demo.suggested_questions'), are updated), and samples
  * whose PDF was removed from the folder are deleted. Running demos keep their copies.
  */
 class DemoSeeder extends Seeder
@@ -49,7 +50,13 @@ class DemoSeeder extends Seeder
             });
 
         foreach ($hashes as $path => $hash) {
-            if ($template->documents()->where('sha256', $hash)->exists()) {
+            // Not config("demo.suggested_questions.{$name}"): the dot in ".pdf" would split the key.
+            $questions = config('demo.suggested_questions')[basename($path)] ?? null;
+            $existing = $template->documents()->where('sha256', $hash)->first();
+
+            if ($existing !== null) {
+                // Keeps the suggestions in step with the config. Running demos keep theirs.
+                $existing->update(['suggested_questions' => $questions]);
                 $this->command?->line('Already imported: '.basename($path));
 
                 continue;
@@ -60,7 +67,7 @@ class DemoSeeder extends Seeder
                 file: new UploadedFile($path, basename($path), 'application/pdf', null, true),
                 pageCount: $extractor->inspect($path)->pages,
             );
-            $document->update(['is_sample' => true]);
+            $document->update(['is_sample' => true, 'suggested_questions' => $questions]);
 
             $this->command?->info("Queued for processing: {$document->title}");
         }

@@ -32,7 +32,11 @@ function demoTemplate(int $samples = 2): User
     $template = User::factory()->create(['email' => config('demo.template_email')]);
 
     foreach (range(1, $samples) as $number) {
-        $sample = Document::factory()->for($template)->ready(2)->create(['title' => "Sample {$number}", 'is_sample' => true]);
+        $sample = Document::factory()->for($template)->ready(2)->create([
+            'title' => "Sample {$number}",
+            'is_sample' => true,
+            'suggested_questions' => ["Question about sample {$number}?"],
+        ]);
         Storage::disk(config('documents.disk'))->put($sample->storage_path, "%PDF-1.7 sample {$number}");
         DocumentPage::factory()->for($sample)->createMany([['page_number' => 1], ['page_number' => 2]]);
         DocumentChunk::factory()->for($sample)->createMany([
@@ -66,7 +70,9 @@ describe('starting a demo', function () {
         $documents = $this->getJson('/api/v1/documents')->assertOk()->json('data');
         expect(collect($documents)->pluck('title')->sort()->values()->all())->toBe(['Sample 1', 'Sample 2'])
             ->and(collect($documents)->pluck('is_sample')->unique()->all())->toBe([true])
-            ->and(collect($documents)->pluck('status')->unique()->all())->toBe(['ready']);
+            ->and(collect($documents)->pluck('status')->unique()->all())->toBe(['ready'])
+            ->and(collect($documents)->sortBy('title')->pluck('suggested_questions')->values()->all())
+            ->toBe([['Question about sample 1?'], ['Question about sample 2?']]);
 
         // Pages, chunks (with their embeddings) and the PDF file are copied, not shared.
         foreach ($demo->documents as $copy) {
@@ -175,7 +181,8 @@ describe('inside a demo', function () {
         ]);
 
         $own = $upload('mine.pdf')->assertAccepted()->json('data');
-        expect($own['is_sample'])->toBeFalse();
+        expect($own['is_sample'])->toBeFalse()
+            ->and($own['suggested_questions'])->toBeNull();
 
         $upload('second.pdf')->assertForbidden()->assertJsonPath('code', 'demo_upload_limit');
 
