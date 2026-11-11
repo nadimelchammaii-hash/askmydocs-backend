@@ -156,7 +156,7 @@ services:
   # LOCAL TEST ONLY: catches every email. Web inbox at http://localhost:8025.
   # Starts only with COMPOSE_PROFILES=mailpit (set in .env.production for local tests).
   mailpit:
-    image: axllent/mailpit:v1.31.6
+    image: axllent/mailpit:v1.32.0
     profiles: [mailpit]
     restart: unless-stopped
     logging: *logging
