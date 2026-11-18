@@ -2,7 +2,7 @@
 # The source code is not copied in: it is mounted from the host, so edits apply immediately.
 # Versions are pinned so rebuilds are reproducible.
 
-FROM composer:2.10.2 AS composer
+FROM composer:2.11.0 AS composer
 
 FROM php:8.4.25-cli-bookworm
 
