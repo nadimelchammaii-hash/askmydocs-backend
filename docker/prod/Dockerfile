@@ -4,7 +4,7 @@
 #   docker build -f docker/prod/Dockerfile -t askmydocs-api:prod .
 # Versions are pinned so rebuilds are reproducible.
 
-FROM composer:2.10.2 AS composer
+FROM composer:2.11.0 AS composer
 
 # --- PHP with the extensions the app needs ---------------------------------------
 FROM php:8.4.25-fpm-bookworm AS php
